@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(lsusb)",
+      "Read(//dev/usb/**)",
+      "Read(//dev/**)",
+      "Bash(lpstat -p -d)",
+      "Bash(lpinfo -v)",
+      "Bash(lpstat -a)",
+      "Bash(lpstat -v)",
+      "Bash(npm -v)",
+      "Bash(cupsenable PrintNotify)",
+      "Bash(cupsaccept PrintNotify)",
+      "Bash(lp -d PrintNotify -o raw /tmp/claude-1000/-home-rreiffenberger-Documents-Print-Notify/9c8e1c9c-5f29-484e-8b3c-316c4853cb2f/scratchpad/test.escpos)",
+      "Bash(lpstat -p PrintNotify)",
+      "Bash(lpstat -o PrintNotify)",
+      "Bash(lpstat -W completed -o PrintNotify)",
+      "Bash(lpstat -a PrintNotify)",
+      "Bash(lpstat -o)",
+      "Bash(dmesg)",
+      "Bash(lsmod)",
+      "Bash(curl -s http://localhost:3000/api/printer)",
+      "Bash(curl -s http://localhost:3000/api/status)",
+      "Bash(curl -sL -o ferrix-logo.png \"https://ferrix.systems/branding/ferrix-logo-dark.png\")",
+      "Bash(python3 to_ascii.py)",
+      "Bash(python3 -)",
+      "Bash(python3 scripts/gen-weather.py)",
+      "Bash(python3 scripts/render.py --style title --width 384 --text 'MORNING DIGEST' --out __TRACKED_VAR__/t_title.png)",
+      "Bash(python3 scripts/render.py --style section --width 384 --text WEATHER --out __TRACKED_VAR__/t_section.png)",
+      "Bash(curl -sS --max-time 20 -i \"https://visualsentinel.com/\")",
+      "Bash(curl -sS --max-time 20 -i \"https://visualsentinel.com/mcp\")",
+      "WebFetch(domain:visualsentinel.com)",
+      "Bash(curl -s --max-time 15 -i \"https://visualsentinel.com/api/alerts?state=OPEN&limit=5\" -H \"Accept: application/json\")",
+      "Bash(curl -s --max-time 15 \"https://visualsentinel.com/api/alerts?state=OPEN&limit=5\" -H \"Accept: application/json\")",
+      "Bash(curl -s --max-time 15 \"https://visualsentinel.com/api/alerts?state=OPEN\" -H \"X-API-Key: vs_live_dummy\")",
+      "Bash(curl -s --max-time 15 \"https://visualsentinel.com/api/monitor-check?url=https://example.com\")",
+      "WebSearch"
+    ]
+  }
+}
