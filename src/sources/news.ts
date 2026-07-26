@@ -58,7 +58,17 @@ export const newsSource: Source = {
       });
     }
 
+    // Drop obituaries / death notices (and any other configured exclusions) by
+    // matching keywords against the headline, outlet, and URL.
+    const exclude = config.sources.news.exclude;
+    const filtered = exclude.length
+      ? items.filter((it) => {
+          const hay = `${it.title} ${it.detail ?? ''} ${it.url ?? ''}`.toLowerCase();
+          return !exclude.some((kw) => hay.includes(kw));
+        })
+      : items;
+
     // Most recent first, capped to the configured limit.
-    return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, config.sources.news.limit);
+    return filtered.sort((a, b) => b.timestamp - a.timestamp).slice(0, config.sources.news.limit);
   },
 };

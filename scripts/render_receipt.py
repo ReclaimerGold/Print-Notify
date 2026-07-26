@@ -38,6 +38,35 @@ def hard_wrap(text, n):
         out.append(para)
     return out
 
+def wrap_runs(runs, n):
+    """Char-wrap a list of {text,bold} runs at column n, flowing spans across
+    lines like the thermal printer does. Returns a list of lines, each a list of
+    (text, bold) segments. Mirrors hard_wrap but preserves per-span bold."""
+    chars = []  # flat (char, bold) stream, with None as a hard line break
+    for r in runs:
+        bold = bool(r.get("bold", False))
+        for i, ch in enumerate(r.get("text", "")):
+            chars.append(None if ch == "\n" else (ch, bold))
+    lines, cur = [], []
+    for c in chars:
+        if c is None or len(cur) >= n:
+            lines.append(cur)
+            cur = []
+        if c is not None:
+            cur.append(c)
+    lines.append(cur)
+    # Coalesce adjacent same-bold chars in each line into (text, bold) segments.
+    out = []
+    for ln in lines:
+        segs = []
+        for ch, bold in ln:
+            if segs and segs[-1][1] == bold:
+                segs[-1][0] += ch
+            else:
+                segs.append([ch, bold])
+        out.append([(t, b) for t, b in segs])
+    return out
+
 def render(spec, out):
     W = spec.get("width", 384)
     margin = spec.get("margin", 18)
@@ -56,6 +85,9 @@ def render(spec, out):
             if im.width > W:
                 im = im.resize((W, round(im.height * W / im.width)), Image.LANCZOS)
             strips.append(("image", im, b.get("align", "center")))
+        elif t == "text" and "runs" in b:
+            for segs in wrap_runs(b["runs"], chars):
+                strips.append(("runs", segs, b.get("align", "left")))
         elif t == "text":
             for line in hard_wrap(b.get("text", ""), chars):
                 strips.append(("text", line, b.get("bold", False), b.get("align", "left")))
@@ -66,7 +98,12 @@ def render(spec, out):
 
     total_h = margin
     for s in strips:
-        total_h += s[1].height + 4 if s[0] == "image" else (line_h if s[0] == "text" else line_h // 2)
+        if s[0] == "image":
+            total_h += s[1].height + 4
+        elif s[0] in ("text", "runs"):
+            total_h += line_h
+        else:
+            total_h += line_h // 2
     total_h += margin
 
     # --- pass 2: paint ---
@@ -85,6 +122,15 @@ def render(spec, out):
             w = d.textlength(line, font=fnt)
             x = margin + (W - w) / 2 if align == "center" else margin
             d.text((x, y), line, font=fnt, fill=0)
+            y += line_h
+        elif s[0] == "runs":
+            segs, align = s[1], s[2]
+            total_w = sum(d.textlength(t, font=(f_bold if b else f_reg)) for t, b in segs)
+            x = margin + (W - total_w) / 2 if align == "center" else margin
+            for t, b in segs:
+                fnt = f_bold if b else f_reg
+                d.text((x, y), t, font=fnt, fill=0)
+                x += d.textlength(t, font=fnt)
             y += line_h
         else:
             y += line_h // 2

@@ -4,6 +4,21 @@ import type { Source, NotificationItem } from './types.js';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_SHOWN = 3;
 
+// Monochrome symbol glyph per GitHub notification reason, drawn in the styled
+// receipt list row (see scripts/render_list.py, which per-glyph picks the first
+// font that has it). Unknown reasons fall back to the plain bullet.
+const REASON_ICON: Record<string, string> = {
+  review_requested: '◉',   // eyes on you
+  mention: '@',
+  team_mention: '@',
+  comment: '🗨',           // speech balloon
+  assign: '⚑',            // flagged / assigned to you
+  author: '✎',            // your PR
+  ci_activity: '⚙',       // CI
+  state_change: '●',      // opened / merged / closed
+  security_alert: '⚠',
+};
+
 export const githubSource: Source = {
   name: 'github',
   enabled: config.sources.github.enabled,
@@ -32,6 +47,7 @@ export const githubSource: Source = {
       title: n.repository.full_name,
       detail: `${n.subject.title}  (${n.reason.replace(/_/g, ' ')})`,
       severity: 'notice',
+      icon: REASON_ICON[n.reason] ?? '▪',
       url: n.subject.url,
       timestamp: new Date(n.updated_at).getTime(),
     }));
@@ -44,6 +60,7 @@ export const githubSource: Source = {
         source: 'github',
         title: `+ ${extra} more PR${extra === 1 ? '' : 's'} in the last 24h`,
         severity: 'info',
+        icon: '…',
         timestamp: now,
       });
     }

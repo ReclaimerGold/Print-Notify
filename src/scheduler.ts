@@ -4,6 +4,7 @@ import { fetchAll } from './sources/index.js';
 import { printDigest, printAlert } from './digest.js';
 import { filterUnseen } from './store.js';
 import { startSentinel } from './sentinel.js';
+import { startWeatherAlerts } from './weatherAlerts.js';
 
 export interface RunState {
   lastDigest?: string;
@@ -17,7 +18,7 @@ export const state: RunState = {};
 export async function runDigest(title = 'Daily Digest'): Promise<number> {
   const { items, errors } = await fetchAll();
   if (errors.length) console.warn('[digest] source errors:', errors);
-  await printDigest(title, items);
+  await printDigest(title, items, errors);
   state.lastDigest = new Date().toISOString();
   return items.length;
 }
@@ -55,4 +56,5 @@ export function startScheduler(): void {
   );
 
   startSentinel();
+  startWeatherAlerts();
 }

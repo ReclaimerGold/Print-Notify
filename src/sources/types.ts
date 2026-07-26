@@ -12,8 +12,14 @@ export interface NotificationItem {
   url?: string;
   /** Optional bitmap (absolute path) printed above the item's text, e.g. a weather icon. */
   image?: string;
+  /** Optional marker glyph drawn in a styled list row (e.g. a GitHub reason icon). */
+  icon?: string;
   /** If set, the item renders as a pen-checkable task box ([ ] / [x]). */
   checked?: boolean;
+  /** Due date as 'YYYY-MM-DD' (Google Tasks is date-only). Drives sort + overdue. */
+  due?: string;
+  /** Estimated price in USD, set by the grocery price estimator for grocery items. */
+  price?: number;
   /** ms since epoch. */
   timestamp: number;
 }

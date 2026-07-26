@@ -2,192 +2,831 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Print-Notify</title>
   <style>
     :root {
-      --bg:#f4f5f7; --card:#fff; --ink:#1b2430; --muted:#6b7280; --line:#e6e8ec;
+      --bg:#eef0f3; --card:#fff; --ink:#1b2430; --muted:#6b7280; --line:#e2e5ea;
       --accent:#26374a; --accent-ink:#fff;
       --green:#16a34a; --amber:#d97706; --red:#dc2626; --grey:#9ca3af;
-      --radius:14px; --shadow:0 1px 2px rgba(0,0,0,.05), 0 10px 26px rgba(0,0,0,.05);
+      --radius:18px; --shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.06);
+      --tap:52px;
     }
     @media (prefers-color-scheme: dark) {
-      :root { --bg:#0f1319; --card:#161c25; --ink:#e7eaef; --muted:#93a0b1; --line:#28313d; --accent:#3d5673; }
+      :root { --bg:#0c0f14; --card:#161c25; --ink:#e7eaef; --muted:#93a0b1; --line:#28313d; --accent:#3d5673; }
     }
-    * { box-sizing:border-box; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    /* ---- Custom scrollbars (thin, themed) instead of native chrome ---- */
+    * { scrollbar-width:thin; scrollbar-color:color-mix(in srgb, var(--ink) 22%, transparent) transparent; }
+    ::-webkit-scrollbar { width:9px; height:9px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:color-mix(in srgb, var(--ink) 20%, transparent);
+      border-radius:9px; border:2px solid transparent; background-clip:padding-box; }
+    ::-webkit-scrollbar-thumb:hover { background:color-mix(in srgb, var(--ink) 36%, transparent); background-clip:padding-box; }
+    ::-webkit-scrollbar-corner { background:transparent; }
+    html, body { height:100%; }
+    /* Desktop/landscape: a fixed-height flex column so the whole dashboard fills
+       the viewport and the PAGE never scrolls — tiles scroll internally instead.
+       The mobile media query at the bottom relaxes this to a normal scroll page. */
     body { margin:0; background:var(--bg); color:var(--ink);
-      font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
-    .wrap { max-width:1000px; margin:0 auto; padding:1.5rem 1rem 4rem; }
-    header { display:flex; align-items:center; gap:.9rem; margin-bottom:1.4rem; }
-    header img { height:42px; width:auto; }
-    header .title { font-size:1.35rem; font-weight:700; letter-spacing:-.01em; }
-    header .sub { color:var(--muted); font-size:.83rem; margin-top:.15rem; }
-    .grid { display:grid; grid-template-columns:1fr; gap:1.1rem; }
-    @media (min-width:820px){ .grid { grid-template-columns:1fr 360px; align-items:start; } }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
-      box-shadow:var(--shadow); padding:1.1rem 1.2rem; }
-    .card + .card { margin-top:1.1rem; }
-    .card h2 { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
-      margin:0 0 .85rem; font-weight:700; }
-    .status-line { display:flex; align-items:center; gap:.55rem; font-size:1.05rem; font-weight:650; margin-bottom:.75rem; }
+      font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased;
+      height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+
+    /* ---- Top bar ---- */
+    .topbar { position:sticky; top:0; flex:0 0 auto; z-index:20; display:flex; align-items:center; gap:1rem;
+      padding:.7rem 1.1rem; background:var(--card); border-bottom:1px solid var(--line);
+      box-shadow:0 1px 10px rgba(0,0,0,.04); }
+    .topbar img { height:40px; width:auto; }
+    /* Show the dark-ink logo on light backgrounds, the light logo on dark. */
+    .topbar .logo-dark { display:none; }
+    @media (prefers-color-scheme: dark) {
+      .topbar .logo-light { display:none; }
+      .topbar .logo-dark { display:block; }
+    }
+    .brand { font-size:1.2rem; font-weight:800; letter-spacing:-.01em; }
+    .clock { margin-left:auto; text-align:right; line-height:1.1; }
+    .clock .time { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
+    .clock .date { font-size:.8rem; color:var(--muted); }
+    .chip { font-size:.7rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+      color:var(--amber); border:1.5px solid var(--amber); border-radius:999px; padding:.2rem .55rem; }
+    .gear { width:var(--tap); height:var(--tap); flex:0 0 auto; border-radius:14px; border:1px solid var(--line);
+      background:var(--card); color:var(--ink); font-size:1.5rem; cursor:pointer; line-height:1;
+      display:flex; align-items:center; justify-content:center; transition:border-color .12s, transform .05s; }
+    .gear:hover { border-color:var(--accent); }
+    .gear:active { transform:scale(.95); }
+    /* ---- Quick-print actions, moved into the header ---- */
+    .qp-actions { display:flex; align-items:center; gap:.5rem; }
+    .qp { min-height:40px; padding:0 .9rem; font:inherit; font-weight:700; font-size:.9rem;
+      border-radius:11px; border:1px solid var(--line); background:var(--card); color:var(--ink);
+      cursor:pointer; white-space:nowrap; transition:border-color .12s, transform .05s, background .12s; }
+    .qp:hover { border-color:var(--accent); }
+    .qp:active { transform:translateY(1px); }
+    .qp.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+
+    /* ---- Tile grid: full-height columns that share the viewport width equally,
+           so nothing spills past the fold. Each column stacks its tiles, which
+           split the column height and scroll their own body. ---- */
+    .grid { flex:1 1 auto; min-height:0; overflow:hidden;
+      display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr);
+      grid-template-rows:minmax(0, 1fr);
+      gap:1rem; padding:1rem; }
+    .col { display:flex; flex-direction:column; gap:1rem; min-height:0; }
+    .col > .tile { flex:1 1 0; }
+    .tile { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:1rem 1.15rem; display:flex; flex-direction:column;
+      min-height:0; }
+    .tile-head { display:flex; align-items:center; gap:.6rem; margin-bottom:.85rem; }
+    .tile-head h2 { font-size:.76rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+      margin:0; font-weight:800; }
+    .tile-head .ic { font-size:1.15rem; }
+    .tile-head .count { margin-left:auto; font-size:.72rem; font-weight:800; color:var(--muted);
+      background:color-mix(in srgb, var(--ink) 7%, transparent); border-radius:999px; padding:.1rem .55rem;
+      min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    /* Compact per-tile print button, top-right in the header (always follows the
+       count pill, which carries the margin-left:auto that pushes both right). */
+    .tile-head .print { flex:0 0 auto; margin-left:.5rem; width:32px; height:32px; border-radius:9px;
+      border:1px solid var(--line); background:var(--card); color:var(--muted); font-size:1rem; line-height:1;
+      cursor:pointer; display:flex; align-items:center; justify-content:center;
+      transition:border-color .12s, color .12s, transform .05s; }
+    .tile-head .print:hover { border-color:var(--accent); color:var(--ink); }
+    .tile-head .print:active { transform:scale(.92); }
+
+    /* Add-item box in the footer of Tasks / Groceries tiles. */
+    .additem { display:flex; gap:.5rem; }
+    .additem input { flex:1 1 auto; min-width:0; height:42px; padding:0 .8rem; font:inherit; font-size:.95rem;
+      border:1px solid var(--line); border-radius:11px; background:var(--card); color:var(--ink); }
+    .additem input:focus { outline:none; border-color:var(--accent); }
+    .additem button { flex:0 0 auto; width:42px; height:42px; border-radius:11px; border:1px solid var(--accent);
+      background:var(--accent); color:var(--accent-ink); font-size:1.4rem; line-height:1; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; transition:transform .05s, opacity .12s; }
+    .additem button:active { transform:translateY(1px); }
+    .additem button:disabled { opacity:.5; cursor:default; }
+    .tile-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; }
+    .tile-foot { margin-top:.9rem; }
+    .empty { color:var(--muted); font-size:.9rem; padding:1rem 0; text-align:center; }
+
+    /* ---- Buttons ---- */
+    button.act { width:100%; min-height:var(--tap); font:inherit; font-weight:700; font-size:1rem;
+      border-radius:13px; border:1px solid var(--line); background:var(--card); color:var(--ink);
+      cursor:pointer; transition:border-color .12s, transform .05s, background .12s; }
+    button.act:hover { border-color:var(--accent); }
+    button.act:active { transform:translateY(1px); }
+    button.act.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+    .btn-row { display:flex; gap:.6rem; }
+    .btn-row > button { flex:1; }
+
+    /* ---- Weather tile ---- */
+    .wx-now { display:flex; align-items:center; gap:1rem; }
+    .wx-ic { font-size:3.6rem; line-height:1; }
+    .wx-temp { font-size:3rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+    .wx-label { font-size:1.05rem; font-weight:600; }
+    .wx-stats { color:var(--muted); font-size:.86rem; margin-top:.5rem; }
+    .wx-fc { display:flex; gap:.5rem; margin-top:1rem; }
+    .wx-day { flex:1; text-align:center; background:color-mix(in srgb, var(--ink) 4%, transparent);
+      border-radius:12px; padding:.6rem .3rem; }
+    .wx-day .d { font-size:.72rem; font-weight:800; text-transform:uppercase; color:var(--muted); }
+    .wx-day .e { font-size:1.7rem; line-height:1.3; }
+    .wx-day .t { font-size:.86rem; font-weight:700; }
+    .wx-day .t .lo { color:var(--muted); font-weight:500; }
+    .wx-day .h { font-size:.72rem; color:var(--muted); margin-top:.15rem; }
+    /* Home location line (which county WEATHER_LAT/LON sits in) */
+    .wx-loc { font-size:.78rem; color:var(--muted); margin-bottom:.6rem; display:flex;
+      align-items:center; gap:.3rem; }
+    /* NWS alerts banner */
+    .wx-alerts { display:flex; flex-direction:column; gap:.5rem; margin-bottom:.9rem; }
+    .wx-alert { --sev:var(--red); border-left:3px solid var(--sev); padding:.5rem .7rem;
+      background:color-mix(in srgb, var(--sev) 10%, transparent); border-radius:8px; }
+    .wx-alert.sev-severe, .wx-alert.sev-extreme { --sev:var(--red); }
+    .wx-alert.sev-moderate { --sev:var(--amber); }
+    .wx-alert.sev-minor, .wx-alert.sev-unknown { --sev:var(--grey); }
+    .wx-alert .ev-row { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+    .wx-alert .ev { font-weight:800; font-size:.9rem; }
+    .wx-alert .badge { font-size:.62rem; font-weight:800; text-transform:uppercase;
+      letter-spacing:.04em; color:#fff; background:var(--sev); border-radius:999px;
+      padding:.08rem .4rem; white-space:nowrap; }
+    .wx-alert .hl { font-size:.8rem; font-weight:600; margin-top:.15rem; overflow-wrap:anywhere; }
+    .wx-alert .meta { font-size:.72rem; color:var(--muted); margin-top:.25rem; }
+    .wx-alert .counties { font-size:.78rem; margin-top:.3rem; overflow-wrap:anywhere; }
+    .wx-alert .counties b { color:var(--sev); }
+    .wx-alert .summary { margin-top:.4rem; display:flex; flex-direction:column; gap:.2rem; }
+    .wx-alert .kv { font-size:.76rem; color:var(--muted); overflow-wrap:anywhere; }
+    .wx-alert .kv b { color:var(--ink); font-weight:800; font-size:.66rem; letter-spacing:.04em;
+      margin-right:.3rem; }
+    .wx-alert .all-counties { font-size:.74rem; margin-bottom:.35rem; overflow-wrap:anywhere; }
+    .wx-alert .all-counties b { color:var(--sev); }
+    .wx-alert details { margin-top:.5rem; }
+    .wx-alert details > summary { font-size:.72rem; font-weight:700; color:var(--muted);
+      cursor:pointer; list-style:none; user-select:none; }
+    .wx-alert details > summary::-webkit-details-marker { display:none; }
+    .wx-alert details > summary::before { content:'▸ '; }
+    .wx-alert details[open] > summary::before { content:'▾ '; }
+    .wx-alert .body { font-size:.76rem; color:var(--muted); margin-top:.35rem;
+      white-space:pre-wrap; overflow-wrap:anywhere; }
+    .wx-alert .body .cta { font-weight:800; color:var(--ink); text-transform:uppercase;
+      font-size:.68rem; letter-spacing:.04em; display:block; margin:.5rem 0 .1rem; }
+    .wx-alert .issued { font-size:.68rem; color:var(--muted); margin-top:.35rem; font-style:italic; }
+    /* Sun/moon/humidity/UV row + 2-hour temp sparkline */
+    .wx-extra { display:flex; flex-wrap:wrap; gap:.4rem 1rem; margin-top:.6rem;
+      font-size:.82rem; color:var(--muted); }
+    .wx-extra span { white-space:nowrap; }
+    .wx-graph { margin-top:.8rem; }
+    .wx-graph .cap { font-size:.72rem; font-weight:800; text-transform:uppercase; color:var(--muted); }
+    .wx-graph .row { display:flex; align-items:center; gap:.5rem; }
+    /* Sparkline + its hour-by-hour axis labels stacked together, between the
+       first/last temperature endpoints. */
+    .wx-plot { flex:1; min-width:0; display:flex; flex-direction:column; gap:.25rem; }
+    .wx-spark { width:100%; height:38px; color:var(--accent); }
+    .wx-ticks { display:flex; justify-content:space-between; font-size:.62rem; line-height:1;
+      color:var(--muted); font-variant-numeric:tabular-nums; }
+    .wx-ticks span { white-space:nowrap; }
+    .wx-graph .ends { font-size:.78rem; font-weight:700; font-variant-numeric:tabular-nums; }
+
+    /* ---- List rows (tasks, calendar, news, github) ---- */
+    .row { display:flex; align-items:flex-start; gap:.6rem; padding:.5rem 0; border-top:1px solid var(--line); }
+    .row:first-child { border-top:0; }
+    .row.urgent { border-left:3px solid var(--red); padding-left:.6rem; margin-left:-.6rem; }
+    .box { flex:0 0 auto; width:22px; height:22px; border-radius:6px; border:2px solid var(--muted);
+      display:flex; align-items:center; justify-content:center; font-size:.9rem; margin-top:.05rem; }
+    .box.on { background:var(--green); border-color:var(--green); color:#fff; }
+    .row .main { flex:1; min-width:0; }
+    .row .t { font-weight:600; overflow-wrap:anywhere; }
+    .row.done .t { text-decoration:line-through; color:var(--muted); font-weight:500; }
+    .row .sub { font-size:.8rem; color:var(--muted); overflow-wrap:anywhere; }
+    .row .when { flex:0 0 auto; font-weight:700; font-size:.82rem; color:var(--accent);
+      font-variant-numeric:tabular-nums; min-width:5.5rem; }
+    @media (prefers-color-scheme: dark){ .row .when { color:var(--muted); } }
+    .due { font-size:.76rem; font-weight:700; color:var(--muted); }
+    .due.over { color:var(--red); }
+    .row .price { align-self:center; font-size:.82rem; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .tile-head .count.est { text-transform:none; letter-spacing:0; }
+
+    /* ---- Receipt tile ---- */
+    .paper-wrap { display:flex; justify-content:center; border-radius:12px; padding:1rem; overflow:auto;
+      max-height:100%;
+      background:repeating-linear-gradient(45deg, transparent, transparent 11px,
+        color-mix(in srgb, var(--ink) 4%, transparent) 11px, color-mix(in srgb, var(--ink) 4%, transparent) 22px); }
+    .paper { background:#fff; width:260px; box-shadow:0 5px 24px rgba(0,0,0,.3); border-radius:3px; overflow:hidden; }
+    .paper img { width:100%; display:block; }
+    .paper.loading { min-height:130px; display:flex; align-items:center; justify-content:center; }
+    .hint { color:var(--muted); font-size:.82rem; text-align:center; padding:1rem; }
+
+    /* ---- Toast ---- */
+    .toast { position:fixed; left:50%; bottom:1.2rem; transform:translateX(-50%) translateY(2rem);
+      background:var(--ink); color:var(--bg); padding:.7rem 1.2rem; border-radius:12px; font-weight:600;
+      box-shadow:0 8px 30px rgba(0,0,0,.28); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+      z-index:60; max-width:90vw; }
+    .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ---- Settings modal ---- */
+    .backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:50;
+      display:flex; align-items:center; justify-content:center; padding:1rem; }
+    .backdrop[hidden] { display:none; }
+    .modal { background:var(--card); border-radius:var(--radius); box-shadow:0 20px 60px rgba(0,0,0,.4);
+      width:min(560px, 100%); max-height:90vh; overflow:auto; padding:1.3rem 1.4rem; }
+    .modal-head { display:flex; align-items:center; margin-bottom:1rem; }
+    .modal-head h2 { margin:0; font-size:1.15rem; font-weight:800; }
+    .modal-head button { margin-left:auto; width:40px; height:40px; border-radius:10px; border:1px solid var(--line);
+      background:var(--card); color:var(--ink); font-size:1.2rem; cursor:pointer; }
+    .modal-head button + button { margin-left:.4rem; } /* second button sits beside the first, not scattered */
+    .sect { margin:1rem 0; }
+    .sect h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+      margin:0 0 .6rem; font-weight:800; }
+    .status-line { display:flex; align-items:center; gap:.55rem; font-size:1.05rem; font-weight:650; margin-bottom:.6rem; }
     .dot { width:.62rem; height:.62rem; border-radius:50%; flex:0 0 auto; }
     .green{background:var(--green)} .amber{background:var(--amber)} .red{background:var(--red)} .grey{background:var(--grey)}
     .meta { display:grid; grid-template-columns:max-content 1fr; gap:.35rem .9rem; font-size:.86rem; }
     .meta .k { color:var(--muted); }
     .meta code { font-size:.78rem; word-break:break-all; color:var(--muted); }
-    .note { margin-top:.75rem; padding:.55rem .75rem; border-radius:9px; font-size:.82rem;
+    .note { margin-top:.6rem; padding:.55rem .75rem; border-radius:9px; font-size:.82rem;
       background:color-mix(in srgb, var(--amber) 13%, transparent); color:var(--amber); }
-    .src { display:flex; align-items:flex-start; gap:.65rem; padding:.6rem 0; border-top:1px solid var(--line); }
-    .src:first-child { border-top:0; padding-top:0; }
+    .src { display:flex; align-items:center; gap:.6rem; padding:.5rem 0; border-top:1px solid var(--line); }
+    .src:first-child { border-top:0; }
     .src .name { font-weight:600; }
-    .src .desc { color:var(--muted); font-size:.82rem; }
-    .src .tag { margin-left:auto; font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
-      color:var(--muted); padding-top:.15rem; }
-    .actions { display:flex; flex-wrap:wrap; gap:.55rem; }
-    button { font:inherit; font-weight:600; padding:.55rem 1rem; border-radius:10px; border:1px solid var(--line);
-      background:var(--card); color:var(--ink); cursor:pointer; transition:border-color .12s, transform .05s; }
-    button:hover { border-color:var(--accent); }
-    button:active { transform:translateY(1px); }
-    button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
-    #msg { min-height:1.3rem; margin-top:.8rem; font-size:.85rem; color:var(--muted); }
-    .preview-card { position:sticky; top:1rem; }
-    .paper-wrap { display:flex; justify-content:center; border-radius:10px; padding:1.3rem;
-      background:repeating-linear-gradient(45deg, transparent, transparent 11px,
-        color-mix(in srgb, var(--ink) 4%, transparent) 11px, color-mix(in srgb, var(--ink) 4%, transparent) 22px); }
-    .paper { background:#fff; width:272px; box-shadow:0 5px 24px rgba(0,0,0,.3); border-radius:3px; overflow:hidden; }
-    .paper img { width:100%; display:block; }
-    .paper.loading { min-height:130px; display:flex; align-items:center; justify-content:center; }
-    .hint { color:var(--muted); font-size:.8rem; text-align:center; padding:1rem; }
+    .src .desc { color:var(--muted); font-size:.8rem; }
+    .src .tag { margin-left:auto; font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em;
+      color:var(--muted); }
+    #modal-msg { min-height:1.2rem; margin-top:.4rem; font-size:.85rem; color:var(--muted); }
+
+    /* ---- Tappable task rows (two-way Google Tasks) ---- */
+    .row.check { border-radius:8px; margin:0 -.4rem; padding-left:.4rem; padding-right:.4rem; }
+    .row.check:hover { background:color-mix(in srgb, var(--ink) 5%, transparent); }
+    .row.check:active { background:color-mix(in srgb, var(--ink) 9%, transparent); }
+    .row .box { transition:background .12s, border-color .12s; }
+
+    /* ---- Mobile (≤720px): stack tiles and scroll the page (not above the fold) ---- */
+    @media (max-width:720px){
+      body { height:auto; overflow:auto; display:block; }
+      .grid { grid-template-columns:1fr; grid-auto-flow:row; grid-auto-columns:auto;
+        grid-template-rows:none; grid-auto-rows:auto; overflow:visible; height:auto; }
+      /* Columns collapse to a normal page flow; tiles size to content, not a split. */
+      .col { display:contents; }
+      .col > .tile { flex:none; }
+      .tile { min-height:0; }
+      .tile-body { overflow:visible; }
+      .paper-wrap { max-height:none; }
+      /* Keep the top bar tidy; let the quick-print actions wrap to their own row. */
+      .topbar { gap:.55rem; padding:.6rem .8rem; flex-wrap:wrap; }
+      .topbar img { height:32px; }
+      .brand { font-size:1rem; white-space:nowrap; }
+      .qp-actions { order:5; flex:1 1 100%; }
+      .qp { flex:1; padding:0 .5rem; font-size:.82rem; min-height:38px; }
+      .clock .time { font-size:1.2rem; }
+      .clock .date { font-size:.72rem; }
+      .gear { width:44px; height:44px; font-size:1.3rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <img src="/logo.png" alt="Ferrix Systems" />
-      <div>
-        <div class="title">Print-Notify</div>
-        <div class="sub" id="sub">loading…</div>
-      </div>
-    </header>
+  <header class="topbar">
+    <img class="logo-light" src="/logo.png" alt="Ferrix Systems" />
+    <img class="logo-dark" src="/logo-light.png" alt="Ferrix Systems" />
+    <div class="brand">Print-Notify</div>
+    <div class="qp-actions">
+      <button class="qp primary" onclick="post('/api/print','Printing full digest…')">Print digest</button>
+      <button class="qp" onclick="post('/api/checklist','Printing checklist…')">Checklist</button>
+      <button class="qp" onclick="post('/api/poll','Checking for urgent…')">Urgent</button>
+    </div>
+    <span class="chip" id="dryrun" hidden>Dry run</span>
+    <div class="clock"><div class="time" id="time">—</div><div class="date" id="date">loading…</div></div>
+    <button class="gear" id="receipt-btn" title="Receipt preview" aria-label="Receipt preview">🧾</button>
+    <button class="gear" id="gear" title="Settings" aria-label="Settings">⚙</button>
+  </header>
 
-    <div class="grid">
-      <div>
-        <div class="card">
-          <h2>Printer</h2>
-          <div class="status-line" id="printer-status"><span class="dot grey"></span> Checking…</div>
-          <div class="meta" id="printer-meta"></div>
-          <div class="note" id="printer-note" hidden></div>
-        </div>
+  <main class="grid" id="grid">
+    <div class="empty" style="grid-column:1/-1">Loading dashboard…</div>
+  </main>
 
-        <div class="card">
-          <h2>Notification sources</h2>
-          <div id="sources">loading…</div>
-        </div>
+  <div class="toast" id="toast"></div>
 
-        <div class="card">
-          <h2>Actions</h2>
-          <div class="actions">
-            <button class="primary" onclick="post('/api/print','Printing digest…')">Print digest</button>
-            <button onclick="preview()">Refresh preview</button>
-            <button onclick="post('/api/poll','Printing urgent…')">Print urgent</button>
-            <button onclick="post('/api/test','Printing test…')">Test print</button>
-          </div>
-          <div id="msg"></div>
-        </div>
+  <div class="backdrop" id="modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Settings &amp; status</h2>
+        <button id="modal-close" aria-label="Close">✕</button>
       </div>
 
-      <div class="card preview-card">
+      <div class="sect">
+        <h3>Printer</h3>
+        <div class="status-line" id="printer-status"><span class="dot grey"></span> Checking…</div>
+        <div class="meta" id="printer-meta"></div>
+        <div class="note" id="printer-note" hidden></div>
+      </div>
+
+      <div class="sect">
+        <h3>Notification sources</h3>
+        <div id="sources">loading…</div>
+      </div>
+
+      <div class="sect">
+        <h3>Schedule</h3>
+        <div class="meta" id="schedule-meta"></div>
+      </div>
+
+      <div class="sect">
+        <button class="act" onclick="post('/api/test','Printing test receipt…', null, true)">Test print</button>
+        <div id="modal-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="backdrop" id="receipt-modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
         <h2>Receipt preview</h2>
-        <div class="paper-wrap">
-          <div class="paper loading" id="paper"><span class="hint">Loading…</span></div>
-        </div>
+        <button id="receipt-refresh" title="Refresh" aria-label="Refresh">↻</button>
+        <button id="receipt-close" aria-label="Close">✕</button>
+      </div>
+      <div class="paper-wrap">
+        <div class="paper loading" id="paper"><span class="hint">Loading…</span></div>
       </div>
     </div>
   </div>
 
   <script>
-    const SOURCE_INFO = {
-      'google-tasks': ['Google Tasks', 'Task & grocery lists with checkboxes'],
-      weather:  ['Weather', 'Current conditions + 3-day forecast'],
-      github:   ['GitHub', 'New pull requests (last 24h, top 3)'],
-      calendar: ['Calendar', "Today's events"],
-      news:     ['Local news', 'Recent headlines'],
-    };
-
     const $ = (id) => document.getElementById(id);
-    const dot = (c) => `<span class="dot ${c}"></span>`;
 
-    async function refresh() {
-      try {
-        const s = await (await fetch('/api/status')).json();
-        $('sub').textContent =
-          `Digest ${s.schedule.morningDigest} · urgent ${s.schedule.pollUrgent} · ${s.timezone}`
-          + (s.printer.dryRun ? ' · DRY RUN' : '');
-        $('sources').innerHTML = s.sources.map((x) => {
-          const [name, desc] = SOURCE_INFO[x.name] || [x.name, ''];
-          return `<div class="src">${dot(x.enabled ? 'green' : 'grey')}`
-            + `<div><div class="name">${name}</div><div class="desc">${desc}</div></div>`
-            + `<span class="tag">${x.enabled ? 'on' : 'off'}</span></div>`;
-        }).join('');
-      } catch (e) { $('sub').textContent = 'status unavailable'; }
+    // ---- Source display metadata (icon + label + description) ----
+    const SOURCE_INFO = {
+      'google-tasks': ['✅', 'Google Tasks', 'Task & grocery lists with checkboxes'],
+      weather:  ['🌤️', 'Weather', 'Current conditions + 3-day forecast'],
+      github:   ['🐙', 'GitHub', 'New pull requests (last 24h, top 3)'],
+      calendar: ['📅', 'Calendar', "Today's events"],
+      news:     ['📰', 'Local news', 'Recent headlines'],
+    };
+    // Tile icons keyed by the grouped source name (Tasks/Groceries are list titles).
+    const TILE_ICON = { calendar:'📅', news:'📰', github:'🐙', groceries:'🛒', tasks:'✅' };
+    const tileIcon = (s) => TILE_ICON[s.toLowerCase()] ?? '📋';
+
+    // ---- Weather code / group -> emoji ----
+    const GROUP_EMOJI = {
+      sun:'☀️', moon:'🌙', 'partly-day':'⛅', 'partly-night':'☁️', cloud:'☁️',
+      fog:'🌫️', drizzle:'🌦️', rain:'🌧️', snow:'❄️', storm:'⛈️',
+    };
+    function codeGroup(code, isDay) {
+      if (code === 0 || code === 1) return isDay ? 'sun' : 'moon';
+      if (code === 2) return isDay ? 'partly-day' : 'partly-night';
+      if (code === 3) return 'cloud';
+      if (code === 45 || code === 48) return 'fog';
+      if (code >= 51 && code <= 57) return 'drizzle';
+      if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return 'snow';
+      if (code >= 95) return 'storm';
+      if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+      return 'cloud';
+    }
+    const wxEmoji = (g) => GROUP_EMOJI[g] ?? '☁️';
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+    let TZ = undefined; // filled from /api/status
+    let todayISO = new Date().toISOString().slice(0, 10);
+
+    // ---- Live clock ----
+    function tickClock() {
+      const now = new Date();
+      const opt = TZ ? { timeZone: TZ } : {};
+      $('time').textContent = now.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', ...opt });
+      $('date').textContent = now.toLocaleDateString('en-US',
+        { weekday:'long', month:'long', day:'numeric', ...opt });
+      todayISO = now.toLocaleDateString('en-CA', opt); // YYYY-MM-DD in tz
     }
 
-    async function refreshPrinter() {
+    // ---- Toast ----
+    let toastTimer;
+    function toast(msg) {
+      const t = $('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+    }
+
+    // ---- Generic POST action ----
+    async function post(url, label, body, inModal) {
+      toast(label);
+      if (inModal) $('modal-msg').textContent = label;
+      try {
+        const r = await (await fetch(url, {
+          method:'POST',
+          headers: body ? { 'Content-Type':'application/json' } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        })).json();
+        const ok = r.ok
+          ? '✓ ' + (r.count !== undefined ? `${r.count} item${r.count === 1 ? '' : 's'}` : (r.printed ?? 'done'))
+          : '✗ ' + r.error;
+        toast(ok);
+        if (inModal) $('modal-msg').textContent = ok;
+      } catch (e) {
+        toast('✗ ' + e);
+        if (inModal) $('modal-msg').textContent = '✗ ' + e;
+      }
+      loadPrinter();
+    }
+    const printSection = (source) => post('/api/print/section', `Printing ${source}…`, { source });
+
+    // ---- Two-way Google Tasks: optimistic checkbox toggle ----
+    async function toggleTask(id, rowEl) {
+      const box = rowEl.querySelector('.box');
+      const wasDone = rowEl.classList.contains('done');
+      const next = !wasDone;
+      const paint = (done) => {
+        rowEl.classList.toggle('done', done);
+        box.classList.toggle('on', done);
+        box.textContent = done ? '✓' : '';
+      };
+      paint(next); // optimistic
+      try {
+        const r = await (await fetch('/api/tasks/toggle', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: next }),
+        })).json();
+        if (!r.ok) throw new Error(r.error || 'update failed');
+        toast(next ? '✓ Marked done' : '↺ Reopened');
+      } catch (e) {
+        paint(wasDone); // revert
+        const msg = String(e.message || e);
+        toast(/scope|insufficient|permission|forbidden|readonly|403/i.test(msg)
+          ? '✗ Needs write access — re-run npm run google-auth' : '✗ ' + msg);
+      }
+    }
+
+    // ---- Add a new item to a Tasks / Groceries list (writes to Google Tasks) ----
+    async function addItem(e, source) {
+      e.preventDefault();
+      const input = e.target.querySelector('input');
+      const btn = e.target.querySelector('button');
+      const title = input.value.trim();
+      if (!title) return false;
+      input.disabled = btn.disabled = true;
+      try {
+        const r = await (await fetch('/api/tasks/add', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ list: source, title }),
+        })).json();
+        if (!r.ok) throw new Error(r.error || 'add failed');
+        toast('✓ Added');
+        await loadDashboard(); // re-render (shows the new item; reprices groceries)
+      } catch (err) {
+        const msg = String(err.message || err);
+        toast(/scope|insufficient|permission|forbidden|readonly|403/i.test(msg)
+          ? '✗ Needs write access — re-run npm run google-auth' : '✗ ' + msg);
+        input.disabled = btn.disabled = false;
+        input.focus();
+      }
+      return false;
+    }
+
+    // ---- Render a group tile's items ----
+    function renderItems(source, items) {
+      if (!items.length) return `<div class="empty">Nothing new.</div>`;
+      const s = source.toLowerCase();
+      return items.map((it) => {
+        // Tasks / groceries: checkbox rows. Tapping toggles completion in Google Tasks.
+        if (it.checked !== undefined) {
+          const over = it.due && !it.checked && it.due < todayISO;
+          const dueLabel = it.due ? `<span class="due${over ? ' over' : ''}">${over ? 'Overdue ' : 'Due '}${esc(it.due.slice(5))}</span>` : '';
+          const tap = it.id ? ` role="button" tabindex="0" onclick="toggleTask('${esc(it.id)}', this)"` : '';
+          const price = it.price != null ? `<span class="price">~$${it.price.toFixed(2)}</span>` : '';
+          return `<div class="row check ${it.checked ? 'done' : ''}"${tap}>
+            <span class="box ${it.checked ? 'on' : ''}">${it.checked ? '✓' : ''}</span>
+            <div class="main"><div class="t">${esc(it.title)}</div>${dueLabel}</div>${price}</div>`;
+        }
+        // Calendar: time on the left, event on the right.
+        if (s === 'calendar') {
+          return `<div class="row"><span class="when">${esc(it.detail ?? '')}</span>
+            <div class="main"><div class="t">${esc(it.title)}</div></div></div>`;
+        }
+        // News: headline + outlet.
+        if (s === 'news') {
+          const link = it.url ? ` onclick="window.open('${esc(it.url)}','_blank')" style="cursor:pointer"` : '';
+          return `<div class="row"${link}><div class="main"><div class="t">${esc(it.title)}</div>
+            <div class="sub">${esc(it.detail ?? '')}</div></div></div>`;
+        }
+        // Default (github, etc.): title + detail, urgent gets an accent bar.
+        return `<div class="row ${it.severity === 'urgent' ? 'urgent' : ''}">
+          <div class="main"><div class="t">${esc(it.title)}</div>
+          ${it.detail ? `<div class="sub">${esc(it.detail)}</div>` : ''}</div></div>`;
+      }).join('');
+    }
+
+    // ---- Weather tile ----
+    // Unicode moon-phase glyph for the dashboard's sun/moon row.
+    function moonEmoji(m) {
+      return ({
+        'New Moon': '🌑', 'Waxing Crescent': '🌒', 'First Quarter': '🌓',
+        'Waxing Gibbous': '🌔', 'Full Moon': '🌕', 'Waning Gibbous': '🌖',
+        'Last Quarter': '🌗', 'Waning Crescent': '🌘',
+      })[m && m.name] || '🌙';
+    }
+    // Inline SVG sparkline of the 2-hourly temperatures.
+    function tempSparkline(hourly) {
+      if (!hourly || hourly.length < 2) return '';
+      const W = 100, H = 34, p = 4;
+      const t = hourly.map((x) => x.temp);
+      const mn = Math.min(...t), mx = Math.max(...t), sp = Math.max(1, mx - mn);
+      const pts = hourly.map((x, i) =>
+        `${(p + (W - 2 * p) * i / (hourly.length - 1)).toFixed(1)},${(p + (H - 2 * p) * (1 - (x.temp - mn) / sp)).toFixed(1)}`
+      ).join(' ');
+      return `<svg class="wx-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5"
+          vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+    }
+    // Hour-by-hour axis labels under the sparkline. Each point keeps a slot so
+    // the shown labels line up with the graph; we thin them to ~5 to avoid crowding.
+    function hourTicks(hourly) {
+      const stride = Math.max(1, Math.round(hourly.length / 5));
+      return `<div class="wx-ticks">${
+        hourly.map((h, i) => `<span>${i % stride === 0 ? esc(h.label) : ''}</span>`).join('')
+      }</div>`;
+    }
+    // A short local time like "Mon 9:00 PM" for an alert's effective/expires.
+    function wxTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d)) return '';
+      return d.toLocaleString('en-US',
+        { ...(TZ ? { timeZone: TZ } : {}), weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    }
+    // NWS narratives hard-wrap with single "\n"s and blank lines between paragraphs.
+    // Unwrap the former to spaces, keep the latter, so the text reflows cleanly.
+    function wxNarrative(text) {
+      if (!text) return '';
+      return String(text).split(/\n\s*\n/)
+        .map((p) => p.replace(/\s*\n\s*/g, ' ').replace(/[ \t]+/g, ' ').trim())
+        .filter(Boolean).join('\n\n');
+    }
+    // Collapse whitespace + cap. `firstSentence` keeps just the opening sentence.
+    function wxClip(s, n) {
+      const f = String(s || '').replace(/\s+/g, ' ').trim();
+      return f.length > n ? f.slice(0, n - 1).trimEnd() + '…' : f;
+    }
+    function wxFirstSentence(s, cap = 160) {
+      const f = String(s || '').replace(/\s+/g, ' ').trim();
+      if (!f) return '';
+      const dot = f.indexOf('. ');
+      return wxClip(dot > 0 ? f.slice(0, dot + 1) : f, cap);
+    }
+    // Pull the structured "HAZARD.../WHAT.../IMPACT..." fields out of a bulletin.
+    function wxSegments(desc) {
+      const out = {};
+      const text = String(desc || '').replace(/\s+/g, ' ').trim();
+      const re = /([A-Z]{3,}(?:\s[A-Z]{3,})*)\.\.\./g;
+      const marks = [];
+      let m;
+      while ((m = re.exec(text))) marks.push({ key: m[1].trim(), from: m.index, valAt: m.index + m[0].length });
+      for (let i = 0; i < marks.length; i++) {
+        const end = i + 1 < marks.length ? marks[i + 1].from : text.length;
+        const val = text.slice(marks[i].valAt, end).replace(/\s*\*\s*$/, '').trim();
+        if (val) out[marks[i].key] = val;
+      }
+      return out;
+    }
+    // Compact "who this covers", leading with the home county when it's included.
+    function wxCountyLine(areas, homeCounty) {
+      if (!areas || !areas.length) return '';
+      const names = areas.map((a) => a.replace(/,\s*[A-Z]{2}$/, '').trim());
+      const home = homeCounty ? homeCounty.split(/ County|,/)[0].trim() : '';
+      const hasHome = home && names.some((a) => a.toLowerCase() === home.toLowerCase());
+      const n = names.length;
+      if (hasHome) {
+        return n === 1 ? `<b>${esc(home)} County</b> (your area)`
+          : `<b>${esc(home)}</b> (your area) +${n - 1} more ${n - 1 === 1 ? 'county' : 'counties'}`;
+      }
+      const head = names.slice(0, 3).map(esc).join(', ');
+      return n <= 3 ? head : `${head} +${n - 3} more`;
+    }
+    function alertCard(a, homeCounty) {
+      const sev = String(a.severity || 'unknown').toLowerCase();
+      // WHEN — the one line that matters most: severity + deadline.
+      const eff = a.effective ? Date.parse(a.effective) : NaN;
+      const when = !isNaN(eff) && eff > Date.now() ? `Starts ${wxTime(a.effective)}`
+        : a.expires ? `Until ${wxTime(a.expires)}` : '';
+      const whenLine = [a.severity, when].filter(Boolean).join('  ·  ');
+
+      // The glanceable essentials, pulled from the bulletin.
+      const seg = wxSegments(a.description);
+      const threat = seg.HAZARD || seg.WHAT || seg.SUMMARY;
+      const impact = seg.IMPACT || seg.IMPACTS;
+      const action = wxFirstSentence(a.instruction);
+      const kv = (label, val, n) => val ? `<div class="kv"><b>${label}</b> ${esc(wxClip(val, n))}</div>` : '';
+      let summary = kv('HAZARD', threat, 160) + kv('IMPACT', impact, 160) + kv('ACTION', action, 200);
+      // Fall back to a one-sentence prose summary (skip all-caps SPC boilerplate).
+      if (!threat && !impact) {
+        const snip = wxFirstSentence(a.description, 180);
+        if (snip && /[a-z]/.test(snip)) summary += `<div class="kv">${esc(snip)}</div>`;
+      }
+
+      // Everything verbose lives behind "Details": the full county list, the full
+      // narrative + call-to-action, and the issuing office.
+      const desc = wxNarrative(a.description);
+      const instr = wxNarrative(a.instruction);
+      const fullCounties = (a.areas && a.areas.length)
+        ? `<div class="all-counties"><b>All ${a.areas.length} counties:</b> ${
+            a.areas.map((c) => esc(c)).join(', ')}</div>` : '';
+      const hasMore = desc || instr || (a.areas && a.areas.length > 4) || a.senderName;
+      const detail = hasMore ? `<details><summary>Details</summary>
+        ${fullCounties}
+        ${desc ? `<div class="body">${esc(desc)}${
+          instr ? `<span class="cta">What to do</span>${esc(instr)}` : ''}</div>` : ''}
+        ${a.senderName ? `<div class="issued">Issued by ${esc(a.senderName)}</div>` : ''}
+      </details>` : '';
+
+      return `<div class="wx-alert sev-${sev}">
+        <div class="ev-row"><span class="badge">${esc(a.severity || 'Alert')}</span>
+          <span class="ev">${esc(a.event)}</span></div>
+        ${whenLine ? `<div class="meta">${esc(whenLine)}</div>` : ''}
+        ${a.areas && a.areas.length ? `<div class="counties">${wxCountyLine(a.areas, homeCounty)}</div>` : ''}
+        ${summary ? `<div class="summary">${summary}</div>` : ''}
+        ${detail}
+      </div>`;
+    }
+    function weatherTile(w) {
+      const c = w.current;
+      const g = codeGroup(c.code, c.isDay);
+      const homeCounty = w.location && w.location.county;
+      const fc = (w.forecast || []).map((d) => `
+        <div class="wx-day"><div class="d">${esc(d.name)}</div>
+          <div class="e">${wxEmoji(d.dayGroup)}</div>
+          <div class="t">${d.hi}°<span class="lo"> / ${d.lo}°</span></div>
+          ${d.humidity !== undefined ? `<div class="h">💧 ${d.humidity}%</div>` : ''}</div>`).join('');
+      const alerts = (w.alerts || []).map((a) => alertCard(a, homeCounty)).join('');
+      const alertBanner = alerts ? `<div class="wx-alerts">${alerts}</div>` : '';
+      const locLine = (w.location && (w.location.county || w.location.city))
+        ? `<div class="wx-loc">📍 ${esc([w.location.county,
+            w.location.city && w.location.city !== (homeCounty || '').split(' County')[0]
+              ? 'near ' + w.location.city : ''].filter(Boolean).join(' · '))}</div>`
+        : '';
+      const hourly = w.hourly || [];
+      const graph = hourly.length >= 2 ? `<div class="wx-graph">
+          <div class="cap">Next 24 hours</div>
+          <div class="row"><span class="ends">${hourly[0].temp}°</span>
+            <div class="wx-plot">${tempSparkline(hourly)}${hourTicks(hourly)}</div>
+            <span class="ends">${hourly[hourly.length - 1].temp}°</span></div>
+        </div>` : '';
+      const moon = w.moon
+        ? `<span>${moonEmoji(w.moon)} ${esc(w.moon.name)} ${Math.round((w.moon.illum || 0) * 100)}%</span>` : '';
+      const extra = `<div class="wx-extra">
+        ${w.sun && w.sun.sunrise ? `<span>🌅 ${esc(w.sun.sunrise)}</span>` : ''}
+        ${w.sun && w.sun.sunset ? `<span>🌇 ${esc(w.sun.sunset)}</span>` : ''}
+        ${moon}
+        ${c.humidity !== undefined ? `<span>💧 ${c.humidity}%</span>` : ''}
+        ${w.uv !== undefined ? `<span>☀️ UV ${w.uv}</span>` : ''}
+      </div>`;
+      return `<div class="tile">
+        <div class="tile-head"><span class="ic">🌤️</span><h2>Weather</h2>
+          <span class="count">${esc(c.label)}</span>
+          <button class="print" title="Print weather" aria-label="Print weather" onclick="printSection('weather')">🖨</button></div>
+        <div class="tile-body">
+          ${locLine}
+          ${alertBanner}
+          <div class="wx-now">
+            <div class="wx-ic">${wxEmoji(g)}</div>
+            <div><div class="wx-temp">${c.temp !== undefined ? c.temp + '°' : '—'}</div>
+              <div class="wx-label">${esc(c.label)}</div></div>
+          </div>
+          <div class="wx-stats">${esc(c.stats)}</div>
+          ${graph}
+          ${extra}
+          <div class="wx-fc">${fc}</div>
+        </div>
+      </div>`;
+    }
+
+    // ---- Group tile ----
+    function groupTile(g) {
+      const total = g.estTotal != null
+        ? `<span class="count est">Est. ~$${g.estTotal.toFixed(2)}${g.priceCity ? ' · ' + esc(g.priceCity) : ''}</span>`
+        : `<span class="count">${g.count}</span>`;
+      const printBtn = `<button class="print" title="Print ${esc(g.label)}" aria-label="Print ${esc(g.label)}" onclick="printSection('${esc(g.source)}')">🖨</button>`;
+      // Tasks / groceries lists get an "add item" box that writes back to Google Tasks.
+      const addBox = g.addable ? `<div class="tile-foot">
+        <form class="additem" onsubmit="return addItem(event, '${esc(g.source)}')">
+          <input type="text" placeholder="Add to ${esc(g.label)}…" aria-label="Add to ${esc(g.label)}" autocomplete="off" />
+          <button type="submit" title="Add" aria-label="Add">+</button>
+        </form></div>` : '';
+      return `<div class="tile">
+        <div class="tile-head"><span class="ic">${tileIcon(g.source)}</span><h2>${esc(g.label)}</h2>
+          ${total}${printBtn}</div>
+        <div class="tile-body">${renderItems(g.source, g.items)}</div>
+        ${addBox}
+      </div>`;
+    }
+
+    // ---- Receipt preview (rendered in a header-button modal, not a tile) ----
+    function refreshReceipt() {
+      const paper = $('paper');
+      if (!paper) return;
+      paper.classList.add('loading');
+      paper.innerHTML = '<span class="hint">Rendering…</span>';
+      const img = new Image();
+      img.onload = () => { paper.classList.remove('loading'); paper.innerHTML = ''; paper.appendChild(img); };
+      img.onerror = () => { paper.innerHTML = '<span class="hint">Preview failed.</span>'; };
+      img.src = '/api/receipt.png?t=' + Date.now();
+    }
+
+    // Tiles are grouped into stacked columns (top -> bottom). Missing sources are
+    // skipped; anything not listed here falls into its own trailing column so
+    // nothing is dropped.
+    const TILE_COLUMNS = [
+      ['weather', 'calendar'],
+      ['tasks', 'groceries'],
+      ['news', 'github'],
+    ];
+
+    // ---- Load the dashboard tiles ----
+    async function loadDashboard() {
+      try {
+        const d = await (await fetch('/api/dashboard')).json();
+        if (d.timezone) TZ = d.timezone;
+        // Render every tile, keyed by its source, then arrange into columns.
+        const byKey = {};
+        if (d.weather) byKey.weather = weatherTile(d.weather);
+        for (const g of (d.groups || [])) byKey[g.source.toLowerCase()] = groupTile(g);
+        const used = new Set();
+        const cols = [];
+        for (const keys of TILE_COLUMNS) {
+          const stack = keys.filter((k) => byKey[k]);
+          stack.forEach((k) => used.add(k));
+          if (stack.length) cols.push(`<div class="col">${stack.map((k) => byKey[k]).join('')}</div>`);
+        }
+        for (const k of Object.keys(byKey)) {
+          if (!used.has(k)) cols.push(`<div class="col">${byKey[k]}</div>`);
+        }
+        $('grid').innerHTML = cols.length
+          ? cols.join('')
+          : `<div class="empty" style="grid-column:1/-1">Nothing to show.</div>`;
+        if (!$('receipt-modal').hidden) refreshReceipt(); // keep an open preview fresh
+      } catch (e) {
+        $('grid').innerHTML = `<div class="empty" style="grid-column:1/-1">Dashboard unavailable: ${esc(e)}</div>`;
+      }
+    }
+
+    // ---- Settings modal: status + sources + schedule + printer ----
+    async function loadStatus() {
+      try {
+        const s = await (await fetch('/api/status')).json();
+        TZ = s.timezone || TZ;
+        $('dryrun').hidden = !s.printer.dryRun;
+        $('sources').innerHTML = s.sources.map((x) => {
+          const [ic, name, desc] = SOURCE_INFO[x.name] || ['📋', x.name, ''];
+          return `<div class="src"><span>${ic}</span>`
+            + `<div><div class="name">${esc(name)}</div><div class="desc">${esc(desc)}</div></div>`
+            + `<span class="tag">${x.enabled ? 'on' : 'off'}</span></div>`;
+        }).join('');
+        $('schedule-meta').innerHTML = [
+          ['Morning digest', s.schedule.morningDigest],
+          ['Urgent poll', s.schedule.pollUrgent],
+          ['Timezone', s.timezone],
+          ['Printer queue', s.printer.queue],
+          ['Last digest', s.state.lastDigest ? new Date(s.state.lastDigest).toLocaleString('en-US', { timeZone:s.timezone }) : '—'],
+          ['Last poll', s.state.lastPoll ? new Date(s.state.lastPoll).toLocaleString('en-US', { timeZone:s.timezone }) : '—'],
+        ].map(([k, v]) => `<span class="k">${k}</span><span><code>${esc(v)}</code></span>`).join('');
+      } catch (e) { $('sources').textContent = 'status unavailable'; }
+    }
+
+    async function loadPrinter() {
       try {
         const p = await (await fetch('/api/printer')).json();
         let color = 'green', label = 'Ready';
         if (!p.connected) { color = 'red'; label = 'Printer offline'; }
         else if (p.state === 'disabled') { color = 'red'; label = 'Queue disabled'; }
         else if (p.reasons && p.reasons.length) { color = 'amber'; label = p.reasons.join(', '); }
-        $('printer-status').innerHTML = dot(color) + ' ' + label;
-
+        $('printer-status').innerHTML = `<span class="dot ${color}"></span> ${esc(label)}`;
         const rows = [
-          ['Queue', p.queue],
-          ['Device', `<code>${p.deviceUri ?? '—'}</code>`],
+          ['Queue', esc(p.queue)],
+          ['Device', `<code>${esc(p.deviceUri ?? '—')}</code>`],
           ['Accepting jobs', p.accepting ? 'yes' : 'no'],
-          ['Recent jobs', (p.recentJobs || []).map((j) => j.id).join(', ') || '—'],
+          ['Recent jobs', (p.recentJobs || []).map((j) => esc(j.id)).join(', ') || '—'],
         ];
         $('printer-meta').innerHTML = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
         const note = $('printer-note');
-        if (p.note && p.note !== 'OK') { note.textContent = p.note; note.hidden = false; }
-        else note.hidden = true;
+        if (p.note && p.note !== 'OK') { note.textContent = p.note; note.hidden = false; } else note.hidden = true;
       } catch (e) {
-        $('printer-status').innerHTML = dot('grey') + ' Printer info unavailable';
+        $('printer-status').innerHTML = `<span class="dot grey"></span> Printer info unavailable`;
       }
     }
 
-    async function preview() {
-      const paper = $('paper');
-      $('msg').textContent = 'Rendering preview…';
-      paper.classList.add('loading');
-      paper.innerHTML = '<span class="hint">Rendering…</span>';
-      try {
-        const r = await (await fetch('/api/preview')).json();
-        const img = new Image();
-        img.onload = () => { paper.classList.remove('loading'); paper.innerHTML = ''; paper.appendChild(img); };
-        img.onerror = () => { paper.innerHTML = '<span class="hint">Preview failed.</span>'; };
-        img.src = '/api/receipt.png?t=' + Date.now();
-        const errs = r.errors?.length ? ` · errors: ${JSON.stringify(r.errors)}` : '';
-        $('msg').textContent = `${r.count ?? 0} items from ${(r.sources || []).join(', ') || 'no sources'}${errs}`;
-      } catch (e) {
-        paper.innerHTML = '<span class="hint">Preview failed.</span>';
-        $('msg').textContent = '';
-      }
-    }
+    // ---- Settings modal open/close ----
+    function openModal() { $('modal').hidden = false; loadStatus(); loadPrinter(); }
+    function closeModal() { $('modal').hidden = true; }
+    $('gear').onclick = openModal;
+    $('modal-close').onclick = closeModal;
+    $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
 
-    async function post(url, label) {
-      $('msg').textContent = label;
-      try {
-        const r = await (await fetch(url, { method: 'POST' })).json();
-        $('msg').textContent = r.ok ? '✓ ' + (r.count ?? r.printed ?? 'done') : '✗ ' + r.error;
-      } catch (e) { $('msg').textContent = '✗ ' + e; }
-      refreshPrinter();
-    }
+    // ---- Receipt preview modal open/close ----
+    function openReceipt() { $('receipt-modal').hidden = false; refreshReceipt(); }
+    function closeReceipt() { $('receipt-modal').hidden = true; }
+    $('receipt-btn').onclick = openReceipt;
+    $('receipt-close').onclick = closeReceipt;
+    $('receipt-refresh').onclick = refreshReceipt;
+    $('receipt-modal').addEventListener('click', (e) => { if (e.target === $('receipt-modal')) closeReceipt(); });
 
-    refresh();
-    refreshPrinter();
-    preview();
-    setInterval(refreshPrinter, 15000);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeReceipt(); } });
+
+    // ---- Boot ----
+    tickClock();
+    setInterval(tickClock, 1000 * 15);
+    loadDashboard();
+    loadStatus();
+    setInterval(loadDashboard, 1000 * 60 * 5);   // refresh tiles every 5 min
+    setInterval(() => { if (!$('modal').hidden) loadPrinter(); }, 15000);
   </script>
 </body>
 </html>

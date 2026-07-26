@@ -27,6 +27,7 @@ export const tasksSource: Source = {
           source: list.title, // section header = the list's own name (TASKS / GROCERIES)
           title: t.title.trim(),
           checked: t.status === 'completed',
+          due: t.due ? t.due.slice(0, 10) : undefined, // RFC3339 -> 'YYYY-MM-DD'
           severity: 'info',
           timestamp: now,
         });
