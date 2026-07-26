@@ -12,7 +12,7 @@ import shutil
 from PIL import Image
 
 SRC = "branding/ferrix-logo.png"
-TARGET_W = 384   # print width in dots (<= ~512 for TM-T88VI; multiple of 8)
+TARGET_W = 504   # full print head width (matches src/bitmap.ts PRINT_WIDTH)
 
 src = Image.open(SRC).convert("RGBA")
 white = Image.new("RGBA", src.size, (255, 255, 255, 255))

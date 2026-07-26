@@ -33,10 +33,17 @@ def icon(group, target_h):
     w, h = im.size
     return im.resize((round(w * target_h / h), target_h), Image.LANCZOS)
 
+def draw_drop(d, x, top, s):
+    """A small filled water droplet (humidity marker), height ~s, centered on x."""
+    r = s * 0.34
+    cy = top + s - r
+    d.ellipse([x - r, cy - r, x + r, cy + r], fill=0)
+    d.polygon([(x, top), (x - r, cy), (x + r, cy)], fill=0)
+
 def render(spec, out):
     W = spec.get("width", 384)
     days = spec["days"]
-    f_cap, f_hdr, f_name, f_temp = font(26), font(16), font(23), font(24)
+    f_cap, f_hdr, f_name, f_temp, f_hum = font(26), font(16), font(23), font(24), font(15)
 
     header_h, colhdr_h, row_h, icon_h = 34, 24, 62, 44
     H = header_h + colhdr_h + row_h * len(days)
@@ -55,7 +62,14 @@ def render(spec, out):
 
     y = header_h + colhdr_h
     for day in days:
-        d.text((8, y + row_h / 2 - 13), day["name"], font=f_name, fill=0)
+        hum = day.get("humidity")
+        if hum is None:
+            d.text((8, y + row_h / 2 - 13), day["name"], font=f_name, fill=0)
+        else:
+            # stack the day name over a humidity marker (droplet + %)
+            d.text((8, y + 8), day["name"], font=f_name, fill=0)
+            draw_drop(d, 15, y + 38, 15)
+            d.text((26, y + 36), f"{hum}%", font=f_hum, fill=0)
 
         di = icon(day["dayGroup"], icon_h)
         img.paste(di, (day_icon_x, y + (row_h - icon_h) // 2))
