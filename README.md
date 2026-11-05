@@ -40,7 +40,9 @@ and pen-checkable Google Tasks / grocery lists — all rendered as crisp bitmaps
   the on-screen receipt is exactly what prints.
 - **Scheduler** — a **morning digest**, an **evening digest** shifted to *tomorrow*
   (tomorrow's calendar and forecast, next games instead of last night's finals), and a
-  periodic **urgent poll** (prints only new urgent items, deduped).
+  periodic **urgent poll** (prints only new urgent items, deduped). A failed digest
+  retries twice, and one missed while the app was down prints on startup if its time
+  passed within `DIGEST_CATCHUP_HOURS` (default 3).
 - **Hold-and-retry printing** — CUPS accepts a job whether or not the printer can print
   it: cover open or paper out, `lp` exits 0 and the receipt is gone. Every receipt goes
   through a queue that checks printer health first, holds the job on disk when it can't
@@ -49,8 +51,8 @@ and pen-checkable Google Tasks / grocery lists — all rendered as crisp bitmaps
 - **Sentinel** — polls **Visual Sentinel** every 60s and prints a receipt the moment a monitor
   goes **DOWN**. Never repeats an ongoing outage; re-alerts only on recover-then-fail; no
   all-clear prints (saves paper).
-- **Web dashboard** — printer health, source status, one-click actions, and a paper-styled
-  live preview.
+- **Web dashboard** — printer health, source status, held and recent receipts, one-click
+  actions, and a paper-styled live preview.
 
 ## Requirements
 

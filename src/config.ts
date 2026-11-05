@@ -30,6 +30,9 @@ export const config = {
     // fetchAll() on the same tick, doubling every source's upstream load at the
     // one moment of the day nobody is watching. Starting at :07 keeps them apart.
     pollUrgent: process.env.POLL_CRON ?? '7,22,37,52 * * * *',
+    // On startup, print a digest whose scheduled time passed within this many
+    // hours while the app was down. 0 disables catch-up.
+    catchUpHours: num(process.env.DIGEST_CATCHUP_HOURS, 3),
   },
   sources: {
     weather: {
