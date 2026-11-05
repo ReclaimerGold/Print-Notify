@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { writeJson } from './jsonFile.js';
 
 const FILE = 'data/seen.json';
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // forget ids after 7 days
@@ -14,7 +15,7 @@ async function load(): Promise<Seen> {
 }
 
 async function save(seen: Seen): Promise<void> {
-  await writeFile(FILE, JSON.stringify(seen));
+  await writeJson(FILE, seen);
 }
 
 /** Return the subset of ids not seen before, and record them as seen now. */

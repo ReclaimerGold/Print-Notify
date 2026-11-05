@@ -7,7 +7,8 @@
 //   - Never repeat a notification for the same ongoing outage.
 //   - Re-notify only if a monitor recovers and then goes DOWN again (new alert).
 //   - On first run, baseline existing outages silently (no paper dump).
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { writeJsonSync } from './jsonFile.js';
 import { config } from './config.js';
 import { printReceipt, type Block } from './digest.js';
 import { LOGO_PRINT_PATH } from './logo.js';
@@ -50,7 +51,7 @@ function loadState(): void {
 
 function saveState(): void {
   try {
-    writeFileSync(STATE_FILE, JSON.stringify({ notified: [...notified], baselined }));
+    writeJsonSync(STATE_FILE, { notified: [...notified], baselined });
   } catch {
     /* non-fatal */
   }

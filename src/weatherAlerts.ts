@@ -9,7 +9,8 @@
 //     messageType), or an alert changes in place.
 //   - EXPIRED when a known alert drops out of the feed and wasn't superseded.
 //   - On first run, baseline existing alerts silently (no paper dump).
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { writeJsonSync } from './jsonFile.js';
 import { config } from './config.js';
 import { printReceipt, type Block } from './digest.js';
 import { LOGO_PRINT_PATH } from './logo.js';
@@ -96,10 +97,7 @@ function loadState(): void {
 
 function saveState(): void {
   try {
-    writeFileSync(STATE_FILE, JSON.stringify({
-      baselined,
-      active: Object.fromEntries(active),
-    }));
+    writeJsonSync(STATE_FILE, { baselined, active: Object.fromEntries(active) });
   } catch {
     /* non-fatal */
   }

@@ -8,3 +8,7 @@ data/*.db-*
 *.log
 mockups/
 data/receipts/
+# Bundled seed tables the app reads at startup; everything else in data/ is runtime state.
+!data/grocery-prices.json
+!data/food-categories.json
+!data/region-multipliers.json

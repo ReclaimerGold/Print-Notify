@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { ThermalPrinter, PrinterTypes, CharacterSet } from 'node-thermal-printer';
 import { config } from './config.js';
 
@@ -24,6 +24,7 @@ export function createPrinter(): ThermalDevice {
 /** Send raw ESC/POS bytes to the printer via the CUPS raw queue (no sudo needed). */
 export async function printBuffer(buffer: Buffer): Promise<void> {
   if (config.printer.dryRun) {
+    await mkdir('data', { recursive: true });
     await writeFile('data/last-receipt.bin', buffer);
     console.log(`[printer] DRY RUN — ${buffer.length} bytes written to data/last-receipt.bin`);
     return;

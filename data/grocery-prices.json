@@ -1,0 +1,329 @@
+{
+  "basis": "U.S. city-average retail prices from the Bureau of Labor Statistics (BLS) Average Price Data, converted to a typical single purchase unit per category. Refresh with `npm run refresh-prices`. Categories BLS does not cover keep hand-set estimates. Region multipliers scale these per census region.",
+  "region": "US",
+  "unitNote": "Grocery list items carry no quantity, so each price is the typical single-unit purchase for the category (e.g. 1 gal milk, 1 dozen eggs, ~1 lb loose produce).",
+  "lastUpdated": "2026-05",
+  "categories": {
+    "peanut_butter": {
+      "price": 2.8,
+      "unit": "16 oz jar"
+    },
+    "cream_cheese": {
+      "price": 2,
+      "unit": "8 oz"
+    },
+    "sour_cream": {
+      "price": 1.9,
+      "unit": "16 oz"
+    },
+    "ice_cream": {
+      "price": 4.53,
+      "unit": "48 oz"
+    },
+    "shredded_cheese": {
+      "price": 2.5,
+      "unit": "8 oz bag"
+    },
+    "orange_juice": {
+      "price": 3.5,
+      "unit": "52 oz"
+    },
+    "ground_beef": {
+      "price": 7.06,
+      "unit": "1 lb"
+    },
+    "chicken": {
+      "price": 4.17,
+      "unit": "1 lb"
+    },
+    "turkey": {
+      "price": 6,
+      "unit": "1 lb deli / fresh"
+    },
+    "bacon": {
+      "price": 6.71,
+      "unit": "1 lb"
+    },
+    "sausage": {
+      "price": 4,
+      "unit": "1 lb"
+    },
+    "pork": {
+      "price": 4.39,
+      "unit": "1 lb"
+    },
+    "beef": {
+      "price": 12.8,
+      "unit": "1 lb steak/roast"
+    },
+    "salmon": {
+      "price": 9,
+      "unit": "1 lb"
+    },
+    "shrimp": {
+      "price": 8,
+      "unit": "1 lb"
+    },
+    "tuna": {
+      "price": 1.2,
+      "unit": "5 oz can"
+    },
+    "fish": {
+      "price": 6.5,
+      "unit": "1 lb"
+    },
+    "deli_meat": {
+      "price": 6,
+      "unit": "1 lb"
+    },
+    "canned_tomatoes": {
+      "price": 1.2,
+      "unit": "can"
+    },
+    "milk": {
+      "price": 4.22,
+      "unit": "1 gal"
+    },
+    "butter": {
+      "price": 3.93,
+      "unit": "1 lb"
+    },
+    "cheese": {
+      "price": 2.84,
+      "unit": "8 oz block"
+    },
+    "yogurt": {
+      "price": 3.5,
+      "unit": "32 oz"
+    },
+    "eggs": {
+      "price": 2.19,
+      "unit": "1 dozen"
+    },
+    "bread": {
+      "price": 1.83,
+      "unit": "loaf"
+    },
+    "bananas": {
+      "price": 0.65,
+      "unit": "1 lb"
+    },
+    "apples": {
+      "price": 1.6,
+      "unit": "1 lb"
+    },
+    "oranges": {
+      "price": 1.54,
+      "unit": "1 lb"
+    },
+    "grapes": {
+      "price": 2.5,
+      "unit": "1 lb"
+    },
+    "strawberries": {
+      "price": 3.46,
+      "unit": "1 lb / clamshell"
+    },
+    "lettuce": {
+      "price": 1.96,
+      "unit": "head / bag"
+    },
+    "spinach": {
+      "price": 2.8,
+      "unit": "bag"
+    },
+    "tomatoes": {
+      "price": 2.49,
+      "unit": "1 lb"
+    },
+    "potatoes": {
+      "price": 4.47,
+      "unit": "5 lb bag"
+    },
+    "onions": {
+      "price": 1.2,
+      "unit": "1 lb"
+    },
+    "carrots": {
+      "price": 1.8,
+      "unit": "2 lb bag"
+    },
+    "broccoli": {
+      "price": 1.9,
+      "unit": "1 lb / crown"
+    },
+    "avocado": {
+      "price": 0.8,
+      "unit": "each"
+    },
+    "cucumber": {
+      "price": 0.7,
+      "unit": "each"
+    },
+    "pepper_veg": {
+      "price": 1,
+      "unit": "each"
+    },
+    "coffee": {
+      "price": 7.13,
+      "unit": "12 oz"
+    },
+    "tea": {
+      "price": 3.5,
+      "unit": "box"
+    },
+    "cereal": {
+      "price": 3.8,
+      "unit": "box"
+    },
+    "oatmeal": {
+      "price": 3.5,
+      "unit": "canister"
+    },
+    "rice": {
+      "price": 2.14,
+      "unit": "2 lb"
+    },
+    "pasta_sauce": {
+      "price": 2,
+      "unit": "24 oz jar"
+    },
+    "pasta": {
+      "price": 1.37,
+      "unit": "16 oz"
+    },
+    "flour": {
+      "price": 2.72,
+      "unit": "5 lb"
+    },
+    "sugar": {
+      "price": 4.14,
+      "unit": "4 lb"
+    },
+    "jelly": {
+      "price": 2.8,
+      "unit": "18 oz"
+    },
+    "honey": {
+      "price": 4.5,
+      "unit": "12 oz"
+    },
+    "oil": {
+      "price": 4.5,
+      "unit": "48 oz"
+    },
+    "ketchup": {
+      "price": 2.2,
+      "unit": "20 oz"
+    },
+    "mustard": {
+      "price": 1.5,
+      "unit": "14 oz"
+    },
+    "mayo": {
+      "price": 4.5,
+      "unit": "30 oz"
+    },
+    "salt": {
+      "price": 0.6,
+      "unit": "26 oz"
+    },
+    "soup": {
+      "price": 1.5,
+      "unit": "can"
+    },
+    "beans": {
+      "price": 1,
+      "unit": "can / 1 lb"
+    },
+    "chips": {
+      "price": 3.95,
+      "unit": "bag"
+    },
+    "crackers": {
+      "price": 3,
+      "unit": "box"
+    },
+    "cookies": {
+      "price": 3.11,
+      "unit": "pack"
+    },
+    "frozen_pizza": {
+      "price": 4.5,
+      "unit": "each"
+    },
+    "frozen_veg": {
+      "price": 1.5,
+      "unit": "bag"
+    },
+    "soda": {
+      "price": 6.89,
+      "unit": "12 pack"
+    },
+    "water": {
+      "price": 4.5,
+      "unit": "24 pack"
+    },
+    "juice": {
+      "price": 3,
+      "unit": "64 oz"
+    },
+    "paper_towels": {
+      "price": 8,
+      "unit": "6 rolls"
+    },
+    "toilet_paper": {
+      "price": 10,
+      "unit": "12 rolls"
+    },
+    "napkins": {
+      "price": 3,
+      "unit": "pack"
+    },
+    "dish_soap": {
+      "price": 3.5,
+      "unit": "bottle"
+    },
+    "laundry": {
+      "price": 9,
+      "unit": "bottle"
+    },
+    "trash_bags": {
+      "price": 8,
+      "unit": "box"
+    },
+    "foil": {
+      "price": 4,
+      "unit": "roll"
+    },
+    "sandwich_bags": {
+      "price": 3.5,
+      "unit": "box"
+    },
+    "shampoo": {
+      "price": 5,
+      "unit": "bottle"
+    },
+    "toothpaste": {
+      "price": 3,
+      "unit": "tube"
+    },
+    "soap": {
+      "price": 4,
+      "unit": "pack"
+    },
+    "dog_food": {
+      "price": 15,
+      "unit": "bag"
+    },
+    "cat_food": {
+      "price": 12,
+      "unit": "bag"
+    },
+    "diapers": {
+      "price": 20,
+      "unit": "pack"
+    }
+  },
+  "source": "BLS Average Price Data, U.S. city average (api.bls.gov); regionalized via region-multipliers.json"
+}
