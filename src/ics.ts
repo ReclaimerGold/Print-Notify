@@ -185,10 +185,17 @@ function occurrence(ev: IcsEvent, wall: number): IcsEvent {
   };
 }
 
+/** Whether an event runs during [fromMs, toMs). DTEND is exclusive. */
+function overlaps(ev: IcsEvent, fromMs: number, toMs: number): boolean {
+  const end = ev.end && ev.end.ms > ev.start.ms ? ev.end.ms : ev.start.ms + 1;
+  return ev.start.ms < toMs && end > fromMs;
+}
+
 /**
- * Every event occurrence starting in [fromMs, toMs): one-offs, expanded recurring
- * series, and one-off edits of a series. Cancelled events, EXDATEs, and the
- * originals of edited occurrences are left out.
+ * Every event occurrence running during [fromMs, toMs): one-offs, expanded recurring
+ * series, and one-off edits of a series, including anything that began earlier and
+ * is still going. Cancelled events, EXDATEs, and the originals of edited occurrences
+ * are left out.
  */
 export function occurrencesBetween(events: IcsEvent[], fromMs: number, toMs: number): IcsEvent[] {
   // An edited or cancelled occurrence replaces its slot in the series.
@@ -200,18 +207,19 @@ export function occurrencesBetween(events: IcsEvent[], fromMs: number, toMs: num
     replaced.set(ev.uid, slots);
   }
 
-  const inWindow = (ms: number) => ms >= fromMs && ms < toMs;
   const out: IcsEvent[] = [];
   for (const ev of events) {
     if (ev.status === 'CANCELLED') continue;
     if (!ev.rrule) {
-      if (inWindow(ev.start.ms)) out.push(ev);
+      if (overlaps(ev, fromMs, toMs)) out.push(ev);
       continue;
     }
     const skip = new Set([...(ev.exdates ?? []), ...(replaced.get(ev.uid ?? '') ?? [])]);
-    for (const wall of recurrences(ev, fromMs, toMs)) {
+    // An occurrence that started before the window can still reach into it.
+    const length = ev.end ? Math.max(0, ev.end.ms - ev.start.ms) : 0;
+    for (const wall of recurrences(ev, fromMs - length, toMs)) {
       const occ = occurrence(ev, wall);
-      if (inWindow(occ.start.ms) && !skip.has(occ.start.ms)) out.push(occ);
+      if (overlaps(occ, fromMs, toMs) && !skip.has(occ.start.ms)) out.push(occ);
     }
   }
   return out;

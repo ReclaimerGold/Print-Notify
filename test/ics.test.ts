@@ -203,3 +203,33 @@ test('an unreadable RRULE skips that series instead of sinking the feed', () => 
     console.warn = warn;
   }
 });
+
+test('a multi-day all-day event shows on every day it covers, not the day after', () => {
+  const ics = feed(['UID:1', 'SUMMARY:trip', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260108']);
+  const day = (d: number) => occurrencesBetween(parseIcs(ics), new Date(2026, 0, d).getTime(), new Date(2026, 0, d + 1).getTime());
+  assert.deepEqual([4, 5, 6, 7, 8].map((d) => day(d).length), [0, 1, 1, 1, 0]);
+});
+
+test('a one-day all-day event stays on one day', () => {
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260106']);
+  const day = (d: number) => occurrencesBetween(parseIcs(ics), new Date(2026, 0, d).getTime(), new Date(2026, 0, d + 1).getTime());
+  assert.deepEqual([4, 5, 6].map((d) => day(d).length), [0, 1, 0]);
+});
+
+test('a repeating multi-day event reaches into the days after each start', () => {
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260107', 'RRULE:FREQ=WEEKLY']);
+  const day = (d: number) => occurrencesBetween(parseIcs(ics), new Date(2026, 0, d).getTime(), new Date(2026, 0, d + 1).getTime());
+  assert.deepEqual([12, 13, 14].map((d) => day(d).length), [1, 1, 0]);
+});
+
+test('an event ending exactly at the window start is over', () => {
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART:20260105T230000Z', 'DTEND:20260106T000000Z']);
+  assert.equal(on(ics, '2026-01-06').length, 0);
+  assert.equal(on(ics, '2026-01-05').length, 1);
+});
+
+test('a long repeating event is still found on its last day', () => {
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART;VALUE=DATE:20260105', 'DTEND;VALUE=DATE:20260110', 'RRULE:FREQ=WEEKLY']);
+  const day = (d: number) => occurrencesBetween(parseIcs(ics), new Date(2026, 0, d).getTime(), new Date(2026, 0, d + 1).getTime());
+  assert.deepEqual([16, 17].map((d) => day(d).length), [1, 0]); // Jan 12-16 inclusive
+});
