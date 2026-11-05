@@ -160,3 +160,10 @@ test('daylight delta reads in the direction the day moved', () => {
   // Around the solstice the change is under a rounding threshold.
   assert.equal(daylightLabel({ seconds: 54000, deltaSeconds: 3 }), '15h 00m  ·  same as yesterday');
 });
+
+test('weather ids stay on the local day through the evening', async () => {
+  const { weatherKey } = await import('../src/sources/weather.js');
+  // 7:00pm and 9:00am on Aug 12 in Chicago: different UTC dates, same local day.
+  assert.equal(weatherKey('today', new Date('2026-08-13T00:00:00Z')), 'today:2026-08-12');
+  assert.equal(weatherKey('today', new Date('2026-08-12T14:00:00Z')), 'today:2026-08-12');
+});

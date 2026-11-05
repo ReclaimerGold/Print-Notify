@@ -429,6 +429,14 @@ async function fetchWeatherUncached(ctx?: DigestContext): Promise<WeatherData> {
   };
 }
 
+/**
+ * Id key for one reported day. Uses the local date: a UTC date rolls over in the
+ * evening, which gave a same-day urgent item a new id and printed it a second time.
+ */
+export function weatherKey(day: 'today' | 'tomorrow', now = new Date()): string {
+  return `${day}:${now.toLocaleDateString('en-CA', { timeZone: config.timezone })}`;
+}
+
 export const weatherSource: Source = {
   name: 'weather',
   enabled: config.sources.weather.enabled,
@@ -438,7 +446,7 @@ export const weatherSource: Source = {
     const now = Date.now();
     // Key ids by the day being described, so an evening (tomorrow) item never
     // collides with the morning (today) item in the seen-store.
-    const key = `${w.day}:${new Date().toISOString().slice(0, 10)}`;
+    const key = weatherKey(w.day);
 
     const items: NotificationItem[] = [
       {

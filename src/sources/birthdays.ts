@@ -1,3 +1,4 @@
+import { timedFetch } from '../http.js';
 import { config } from '../config.js';
 import { parseIcs, isYearly, nextYearlyOccurrence, daysUntil, type IcsEvent } from '../ics.js';
 import type { Source, NotificationItem, DigestContext } from './types.js';
@@ -67,7 +68,7 @@ export const birthdaysSource: Source = {
   enabled: config.sources.birthdays.enabled,
   async fetch(ctx?: DigestContext): Promise<NotificationItem[]> {
     const { icsUrl, windowDays, keywords } = config.sources.birthdays;
-    const res = await fetch(icsUrl);
+    const res = await timedFetch(icsUrl);
     if (!res.ok) throw new Error(`Birthdays ICS ${res.status}`);
     const events = parseIcs(await res.text());
 

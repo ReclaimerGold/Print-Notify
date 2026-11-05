@@ -4,6 +4,7 @@
 //
 // The location is effectively static, so the result is cached to a small JSON in
 // the temp dir keyed by the lat/lon — steady-state runs make no network call.
+import { timedFetch } from '../http.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -60,7 +61,7 @@ export async function resolveLocation(): Promise<ResolvedLocation> {
     `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}` +
     `&format=json&zoom=10&addressdetails=1`;
   // Nominatim requires an identifying User-Agent.
-  const res = await fetch(url, { headers: { 'User-Agent': 'print-notify (grocery price estimator)' } });
+  const res = await timedFetch(url, { headers: { 'User-Agent': 'print-notify (grocery price estimator)' } });
   if (!res.ok) throw new Error(`Nominatim ${res.status}`);
   const d: any = await res.json();
   const a = d.address ?? {};

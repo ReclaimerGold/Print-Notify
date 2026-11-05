@@ -1,3 +1,4 @@
+import { timedFetch } from '../http.js';
 import { config } from '../config.js';
 import type { Source, NotificationItem } from './types.js';
 
@@ -23,7 +24,7 @@ export const githubSource: Source = {
   name: 'github',
   enabled: config.sources.github.enabled,
   async fetch(): Promise<NotificationItem[]> {
-    const res = await fetch('https://api.github.com/notifications', {
+    const res = await timedFetch('https://api.github.com/notifications', {
       headers: {
         Authorization: `Bearer ${config.sources.github.token}`,
         Accept: 'application/vnd.github+json',

@@ -1,3 +1,4 @@
+import { timedFetch } from '../http.js';
 import { config } from '../config.js';
 import { occurrencesBetween, parseIcs } from '../ics.js';
 import type { Source, NotificationItem, DigestContext } from './types.js';
@@ -22,7 +23,7 @@ export const calendarSource: Source = {
   name: 'calendar',
   enabled: config.sources.calendar.enabled,
   async fetch(ctx?: DigestContext): Promise<NotificationItem[]> {
-    const res = await fetch(config.sources.calendar.icsUrl);
+    const res = await timedFetch(config.sources.calendar.icsUrl);
     if (!res.ok) throw new Error(`Calendar ICS ${res.status}`);
 
     // The evening digest asks for tomorrow so you see it while you can still prep.

@@ -2,6 +2,7 @@
 // Keyless, but NWS requires a descriptive User-Agent with contact info (see
 // config.weatherAlerts.userAgent). We poll the point-based active-alerts feed to
 // learn which warnings/advisories/watches are in effect for WEATHER_LAT/LON.
+import { timedFetch } from './http.js';
 import { config } from './config.js';
 
 export type AlertCategory = 'warning' | 'advisory' | 'watch' | 'statement' | 'other';
@@ -46,7 +47,7 @@ export function parseAreas(areaDesc?: string): string[] {
 export async function fetchActiveAlerts(): Promise<NwsAlert[]> {
   const { lat, lon } = config.sources.weather;
   const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
-  const res = await fetch(url, {
+  const res = await timedFetch(url, {
     headers: {
       'User-Agent': config.weatherAlerts.userAgent,
       Accept: 'application/geo+json',
@@ -126,7 +127,7 @@ let cachedContext: PointContext | undefined;
 let pending: Promise<PointContext | undefined> | undefined;
 
 async function getJson(url: string): Promise<any> {
-  const res = await fetch(url, {
+  const res = await timedFetch(url, {
     headers: { 'User-Agent': config.weatherAlerts.userAgent, Accept: 'application/geo+json' },
   });
   if (!res.ok) throw new Error(`NWS ${res.status}`);
