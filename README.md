@@ -170,6 +170,19 @@ curl -X POST -H "Authorization: Bearer $TOKEN" 'localhost:3000/api/hooks/print?d
 curl -X POST -H "Authorization: Bearer $TOKEN" 'localhost:3000/api/hooks/print?what=checklist'
 ```
 
+### Network access
+
+The server listens on `127.0.0.1` only. To reach the dashboard or webhook from
+another device, set both of these (the app refuses to start exposed without a
+password):
+
+```bash
+HOST=0.0.0.0
+DASHBOARD_PASSWORD=<openssl rand -hex 16>   # browser login; any username
+```
+
+The webhook still authenticates with `WEBHOOK_TOKEN`, not the password.
+
 ## Run as a service (survive reboots)
 
 ```bash

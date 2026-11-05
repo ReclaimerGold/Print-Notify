@@ -1,4 +1,5 @@
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { config } from './config.js';
 import { sources, fetchAll } from './sources/index.js';
 import { buildDigestBlocks, printSection, sourceRank } from './digest.js';
@@ -21,8 +22,69 @@ function dayContext(value: unknown): DigestContext | undefined {
   return String(value ?? '') === 'tomorrow' ? { day: 'tomorrow' } : undefined;
 }
 
+/** Constant-time string comparison; hashing first hides the length too. */
+function safeEqual(a: string, b: string): boolean {
+  const digest = (s: string) => createHash('sha256').update(s).digest();
+  return timingSafeEqual(digest(a), digest(b));
+}
+
+const LOOPBACK_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** Hostname of a Host header value, without any port. */
+const hostName = (host: string) => host.replace(/:\d+$/, '').toLowerCase();
+
+/** True when `host` means this machine only, so binding it exposes nothing. */
+export function isLoopback(host: string): boolean {
+  return host === '::1' || LOOPBACK_NAMES.has(host.toLowerCase());
+}
+
+/**
+ * Browsers will send a body-less POST to localhost from any page, and a rebound
+ * DNS name can reach a loopback server as if it were same-origin. So a foreign
+ * Origin is refused outright, and without a password the Host must be loopback.
+ */
+function sameOriginOnly(req: Request, res: Response, next: NextFunction) {
+  const host = req.get('host') ?? '';
+  if (!config.server.password && !LOOPBACK_NAMES.has(hostName(host))) {
+    return res.status(403).json({ ok: false, error: 'host not allowed' });
+  }
+  const origin = req.get('origin');
+  if (origin && req.method !== 'GET' && req.method !== 'HEAD') {
+    let originHost = '';
+    try {
+      originHost = new URL(origin).host;
+    } catch {
+      /* "null" or malformed: not same-origin */
+    }
+    if (originHost.toLowerCase() !== host.toLowerCase()) {
+      return res.status(403).json({ ok: false, error: 'cross-origin request refused' });
+    }
+  }
+  return next();
+}
+
+/** HTTP Basic auth (any username) when DASHBOARD_PASSWORD is set. */
+function requirePassword(req: Request, res: Response, next: NextFunction) {
+  if (!config.server.password) return next();
+  const [scheme, encoded] = (req.get('authorization') ?? '').split(' ');
+  const decoded = scheme?.toLowerCase() === 'basic'
+    ? Buffer.from(encoded ?? '', 'base64').toString('utf8')
+    : '';
+  const password = decoded.slice(decoded.indexOf(':') + 1);
+  if (decoded.includes(':') && safeEqual(password, config.server.password)) return next();
+  res.set('WWW-Authenticate', 'Basic realm="Print-Notify", charset="UTF-8"');
+  return res.status(401).json({ ok: false, error: 'authentication required' });
+}
+
 export function createServer() {
   const app = express();
+  app.disable('x-powered-by');
+
+  // The webhook authenticates with its own token, so it sits ahead of the
+  // password; automations (Home Assistant, curl) send no Origin anyway.
+  app.use(sameOriginOnly);
+  app.use((req, res, next) => (req.path === '/api/hooks/print' ? next() : requirePassword(req, res, next)));
+
   app.use(express.json());
   app.use(express.static('public'));
 
@@ -305,7 +367,7 @@ export function createServer() {
     }
     const bearer = /^Bearer\s+(.+)$/i.exec(String(req.get('authorization') ?? ''))?.[1];
     const supplied = bearer ?? req.get('x-webhook-token') ?? String(req.query.token ?? '');
-    if (supplied !== config.webhook.token) {
+    if (!safeEqual(supplied, config.webhook.token)) {
       return res.status(401).json({ ok: false, error: 'bad token' });
     }
     try {
@@ -344,6 +406,12 @@ export function createServer() {
     } catch (e) {
       res.status(500).json({ ok: false, error: String(e) });
     }
+  });
+
+  // Malformed JSON and the like: answer in JSON, never with a stack trace.
+  app.use((err: Error & { status?: number }, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status ?? 500;
+    res.status(status).json({ ok: false, error: status < 500 ? err.message : 'internal error' });
   });
 
   return app;

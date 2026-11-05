@@ -6,6 +6,12 @@ const num = (v: string | undefined, fallback: number) =>
 export const config = {
   server: {
     port: num(process.env.PORT, 3000),
+    // Loopback by default: the API can print, wipe the queue, and read your
+    // calendar and tasks. Exposing it (HOST=0.0.0.0) requires a password.
+    host: process.env.HOST || '127.0.0.1',
+    // HTTP Basic password (any username) guarding the dashboard and API. The
+    // webhook keeps its own WEBHOOK_TOKEN so automations don't need this.
+    password: process.env.DASHBOARD_PASSWORD ?? '',
   },
   timezone: process.env.TZ_NAME ?? 'America/Chicago',
   printer: {
