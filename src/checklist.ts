@@ -119,7 +119,7 @@ export async function printChecklist(): Promise<number> {
   const spec = await pricedChecklistSpec(await tasksSource.fetch(), true);
   const count = checklistItemCount(spec);
   if (count === 0) return 0; // nothing to do — don't waste paper
-  await printReceipt([{ type: 'image', path: await checklistImage(spec), align: 'center' }]);
+  await printReceipt([{ type: 'image', path: await checklistImage(spec), align: 'center' }], 'Checklist');
   return count;
 }
 

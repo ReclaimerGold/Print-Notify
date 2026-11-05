@@ -1,0 +1,28 @@
+[
+  {
+    "type": "image",
+    "kind": "ferrix-logo-print",
+    "align": "center"
+  },
+  {
+    "type": "image",
+    "kind": "title",
+    "align": "center"
+  },
+  {
+    "type": "text",
+    "text": "<TIMESTAMP>",
+    "align": "center"
+  },
+  {
+    "type": "rule"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "text",
+    "text": "Nothing new. Enjoy the quiet.",
+    "align": "center"
+  }
+]

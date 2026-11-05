@@ -7,11 +7,19 @@ import { buildChecklistSpec, printChecklist } from './checklist.js';
 import { priceGroceries } from './prices/priceEstimator.js';
 import { fetchWeatherData } from './sources/weather.js';
 import { setTaskCompleted, insertTask, listTaskLists } from './googleTasks.js';
-import { runDigest, runPoll, state } from './scheduler.js';
+import { runDigest, runEveningDigest, runPoll, state } from './scheduler.js';
 import { weatherAlertsStatus } from './weatherAlerts.js';
 import { printDocument } from './printer.js';
 import { printLogo } from './logo.js';
 import { getPrinterInfo } from './printerInfo.js';
+import { queueStatus, clearQueue, flush } from './printQueue.js';
+import { listArchive, archiveFile } from './archive.js';
+import type { DigestContext } from './sources/types.js';
+
+/** Read the `day` query/body param into a digest context ('today' unless 'tomorrow'). */
+function dayContext(value: unknown): DigestContext | undefined {
+  return String(value ?? '') === 'tomorrow' ? { day: 'tomorrow' } : undefined;
+}
 
 export function createServer() {
   const app = express();
@@ -26,6 +34,9 @@ export function createServer() {
       timezone: config.timezone,
       sources: sources.map((s) => ({ name: s.name, enabled: s.enabled })),
       state,
+      printQueue: { enabled: config.printQueue.enabled, retrySec: config.printQueue.retrySec },
+      archive: { enabled: config.archive.enabled, keep: config.archive.keep },
+      webhook: { enabled: config.webhook.enabled },
       weatherAlerts: weatherAlertsStatus(),
     });
   });
@@ -40,28 +51,78 @@ export function createServer() {
   });
 
   // Item counts + any source errors (drives the summary line under the preview).
-  app.get('/api/preview', async (_req, res) => {
+  // `?day=tomorrow` previews the evening digest.
+  app.get('/api/preview', async (req, res) => {
     try {
-      const { items, errors } = await fetchAll();
+      const { items, errors } = await fetchAll(dayContext(req.query.day));
       res.json({ count: items.length, errors, sources: [...new Set(items.map((i) => i.source))] });
     } catch (e) {
       res.status(500).json({ error: String(e) });
     }
   });
 
+  // Held print jobs waiting on the printer (paper out, cover open, …).
+  app.get('/api/queue', async (_req, res) => {
+    try {
+      res.json(await queueStatus());
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
+  // Retry the backlog now instead of waiting for the next retry tick.
+  app.post('/api/queue/flush', async (_req, res) => {
+    try {
+      res.json({ ok: true, ...(await flush()) });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e) });
+    }
+  });
+
+  // Discard the backlog (e.g. yesterday's digests you no longer want).
+  app.post('/api/queue/clear', async (_req, res) => {
+    try {
+      res.json({ ok: true, dropped: await clearQueue() });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e) });
+    }
+  });
+
+  // Rolling archive of what actually printed.
+  app.get('/api/receipts', async (_req, res) => {
+    try {
+      res.json({ receipts: (await listArchive()).slice().reverse() });
+    } catch (e) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
+  // One archived receipt image. The id is resolved through the archive index,
+  // so it can never address a file outside the archive directory.
+  app.get('/api/receipts/:id.png', async (req, res) => {
+    try {
+      const file = await archiveFile(req.params.id);
+      if (!file) return res.status(404).json({ error: 'no such receipt' });
+      return res.sendFile(file);
+    } catch (e) {
+      return res.status(500).json({ error: String(e) });
+    }
+  });
+
   // Structured data for the dashboard tiles: weather (JSON) + items grouped by
   // source. Weather gets its own field; every other source becomes one tile.
-  app.get('/api/dashboard', async (_req, res) => {
+  app.get('/api/dashboard', async (req, res) => {
     try {
+      const ctx = dayContext(req.query.day);
       const errors: { source: string; message: string }[] = [];
       const [weather, all] = await Promise.all([
         config.sources.weather.enabled
-          ? fetchWeatherData().catch((e) => {
+          ? fetchWeatherData(ctx).catch((e) => {
               errors.push({ source: 'weather', message: String(e?.message ?? e) });
               return null;
             })
           : Promise.resolve(null),
-        fetchAll(),
+        fetchAll(ctx),
       ]);
       errors.push(...all.errors);
 
@@ -129,10 +190,12 @@ export function createServer() {
   });
 
   // Virtual receipt: renders the exact digest layout (bitmaps + text) as a PNG.
-  app.get('/api/receipt.png', async (_req, res) => {
+  app.get('/api/receipt.png', async (req, res) => {
     try {
-      const { items, errors } = await fetchAll();
-      const blocks = await buildDigestBlocks('Digest Preview', items, errors);
+      const ctx = dayContext(req.query.day);
+      const { items, errors } = await fetchAll(ctx);
+      const title = ctx?.day === 'tomorrow' ? 'Evening Preview' : 'Digest Preview';
+      const blocks = await buildDigestBlocks(title, items, errors);
       const png = await receiptImage(blocks, config.printer.width);
       res.set('Cache-Control', 'no-store');
       res.sendFile(png);
@@ -207,20 +270,54 @@ export function createServer() {
       const { items } = await fetchAll();
       const section = items.filter((i) => i.source === source);
       if (!section.length) return res.json({ ok: true, count: 0 });
-      await printSection(source, section);
-      return res.json({ ok: true, count: section.length });
+      const result = await printSection(source, section);
+      return res.json({ ok: true, count: section.length, held: result.heldReason });
     } catch (e) {
       return res.status(500).json({ ok: false, error: String(e) });
     }
   });
 
-  // Print a full digest now.
-  app.post('/api/print', async (_req, res) => {
+  // Print a full digest now. `{"day":"tomorrow"}` prints the evening version.
+  app.post('/api/print', async (req, res) => {
     try {
-      const count = await runDigest('Digest');
-      res.json({ ok: true, count });
+      const evening = String(req.body?.day ?? '') === 'tomorrow';
+      const count = evening ? await runEveningDigest() : await runDigest('Digest');
+      // state.lastHeld tells us whether it reached paper or is waiting on the
+      // printer — reporting "ok" for a held job would be a lie.
+      res.json({ ok: true, count, held: state.lastHeld });
     } catch (e) {
       res.status(500).json({ ok: false, error: String(e) });
+    }
+  });
+
+  /**
+   * Token-guarded inbound trigger for Home Assistant, an iOS Shortcut, a
+   * physical button — anything that should be able to make paper appear.
+   * Auth via `Authorization: Bearer <token>`, `X-Webhook-Token`, or `?token=`.
+   *
+   *   POST /api/hooks/print            -> today's digest
+   *   POST /api/hooks/print?day=tomorrow
+   *   POST /api/hooks/print?what=checklist
+   */
+  app.post('/api/hooks/print', async (req, res) => {
+    if (!config.webhook.enabled) {
+      return res.status(404).json({ ok: false, error: 'webhook disabled (set WEBHOOK_TOKEN)' });
+    }
+    const bearer = /^Bearer\s+(.+)$/i.exec(String(req.get('authorization') ?? ''))?.[1];
+    const supplied = bearer ?? req.get('x-webhook-token') ?? String(req.query.token ?? '');
+    if (supplied !== config.webhook.token) {
+      return res.status(401).json({ ok: false, error: 'bad token' });
+    }
+    try {
+      const what = String(req.query.what ?? req.body?.what ?? 'digest');
+      if (what === 'checklist') {
+        return res.json({ ok: true, what, count: await printChecklist() });
+      }
+      const evening = String(req.query.day ?? req.body?.day ?? '') === 'tomorrow';
+      const count = evening ? await runEveningDigest() : await runDigest('Digest');
+      return res.json({ ok: true, what: 'digest', count, held: state.lastHeld });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String((e as Error)?.message ?? e) });
     }
   });
 

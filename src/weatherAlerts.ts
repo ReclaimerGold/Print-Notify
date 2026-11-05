@@ -264,7 +264,7 @@ export function alertsToEvents(alerts: NwsAlert[], kind: Transition = 'new'): Al
 
 /** Print one receipt covering a batch of alert transitions. */
 async function printWeatherAlerts(events: AlertEvent[]): Promise<void> {
-  await printReceipt(await buildAlertBlocks(events));
+  await printReceipt(await buildAlertBlocks(events), 'Weather Alert');
 }
 
 /** Run one poll cycle; prints on issued/updated/expired transitions only.

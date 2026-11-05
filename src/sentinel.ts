@@ -85,7 +85,7 @@ async function printDown(alerts: VsAlert[]): Promise<void> {
     });
     blocks.push({ type: 'space' });
   }
-  await printReceipt(blocks);
+  await printReceipt(blocks, 'Sentinel Alert');
 }
 
 /** Run one poll cycle; prints on newly-detected DOWN monitors only. */

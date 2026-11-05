@@ -1,0 +1,51 @@
+{
+  "calendar": [
+    {
+      "left": "9:00a",
+      "primary": "Standup",
+      "sub": "until 9:30a"
+    },
+    {
+      "left": "All day",
+      "primary": "Offsite"
+    }
+  ],
+  "birthdays": [
+    {
+      "icon": "★",
+      "primary": "Dana",
+      "sub": "tomorrow  ·  turns 36"
+    }
+  ],
+  "news": [
+    {
+      "primary": "City council approves the thing",
+      "sub": "Local Herald  ·  5h ago"
+    },
+    {
+      "primary": "Second story with no link",
+      "sub": "Local Herald  ·  6h ago"
+    }
+  ],
+  "sports": [
+    {
+      "icon": "▪",
+      "primary": "Twins L 1-2 at Orioles",
+      "sub": "MLB  ·  Final"
+    }
+  ],
+  "github": [
+    {
+      "icon": "◉",
+      "primary": "acme/widgets",
+      "sub": "Fix the flange (review requested)  ·  3h ago"
+    }
+  ],
+  "certs": [
+    {
+      "icon": "⚠",
+      "primary": "example.com — TLS cert expires in 5 days",
+      "sub": "Sep 1, 2026  ·  Let's Encrypt"
+    }
+  ]
+}

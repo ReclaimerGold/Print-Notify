@@ -24,11 +24,25 @@ export interface NotificationItem {
   timestamp: number;
 }
 
+/**
+ * Which day a digest is about. The morning digest and every ad-hoc fetch use
+ * 'today'; the evening digest uses 'tomorrow' so calendar/weather/tasks lead
+ * with what you can still prepare for tonight.
+ */
+export type DigestDay = 'today' | 'tomorrow';
+
+export interface DigestContext {
+  day: DigestDay;
+}
+
+export const TODAY: DigestContext = { day: 'today' };
+
 /** An adapter that knows how to pull items from one external API. */
 export interface Source {
   name: string;
   enabled: boolean;
-  fetch(): Promise<NotificationItem[]>;
+  /** `ctx` defaults to today; sources that can't shift horizon may ignore it. */
+  fetch(ctx?: DigestContext): Promise<NotificationItem[]>;
 }
 
 export interface FetchResult {

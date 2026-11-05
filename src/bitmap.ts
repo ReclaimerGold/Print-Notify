@@ -95,9 +95,19 @@ export interface WeatherPanelSpec {
   hi: number;
   lo: number;
   sun: { sunrise: string; sunset: string };
+  /** Preformatted day length + delta, e.g. "14h 08m  ·  2m 32s shorter". */
+  daylight?: string;
   moon: { name: string; illum: number; waxing: boolean };
   humidity?: number;
   uv?: number;
+  /** US AQI and its EPA band name. */
+  aqi?: number;
+  aqiCategory?: string;
+  pm25?: number;
+  /** Pollen counts (grains/m³) where the model covers the point. */
+  pollen?: { grass?: number; tree?: number; ragweed?: number };
+  /** Graph caption — "NEXT 24 HOURS" today, "TOMORROW" in the evening digest. */
+  heading?: string;
 }
 
 /** Compose the rich weather panel — a 2-hourly temperature graph plus a sun &

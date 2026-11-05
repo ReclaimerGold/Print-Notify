@@ -12,7 +12,8 @@
     "test-print": "tsx scripts/test-print.ts",
     "google-auth": "tsx scripts/google-auth.ts",
     "refresh-prices": "tsx scripts/refresh-prices.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
