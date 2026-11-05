@@ -351,6 +351,18 @@
         <div id="sources">loading…</div>
       </div>
 
+      <div class="sect" id="held-sect" hidden>
+        <h3>Held receipts</h3>
+        <div class="meta" id="held"></div>
+        <button class="act" onclick="retryHeld()">Retry now</button>
+        <button class="act" onclick="discardHeld()">Discard all</button>
+      </div>
+
+      <div class="sect">
+        <h3>Recent receipts</h3>
+        <div class="meta" id="archive">—</div>
+      </div>
+
       <div class="sect">
         <h3>Schedule</h3>
         <div class="meta" id="schedule-meta"></div>
@@ -408,7 +420,7 @@
       return 'cloud';
     }
     const wxEmoji = (g) => GROUP_EMOJI[g] ?? '☁️';
-    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
     let TZ = undefined; // filled from /api/status
     let todayISO = new Date().toISOString().slice(0, 10);
@@ -516,7 +528,7 @@
         if (it.checked !== undefined) {
           const over = it.due && !it.checked && it.due < todayISO;
           const dueLabel = it.due ? `<span class="due${over ? ' over' : ''}">${over ? 'Overdue ' : 'Due '}${esc(it.due.slice(5))}</span>` : '';
-          const tap = it.id ? ` role="button" tabindex="0" onclick="toggleTask('${esc(it.id)}', this)"` : '';
+          const tap = it.id ? ` role="button" tabindex="0" data-id="${esc(it.id)}" onclick="toggleTask(this.dataset.id, this)"` : '';
           const price = it.price != null ? `<span class="price">~$${it.price.toFixed(2)}</span>` : '';
           return `<div class="row check ${it.checked ? 'done' : ''}"${tap}>
             <span class="box ${it.checked ? 'on' : ''}">${it.checked ? '✓' : ''}</span>
@@ -529,8 +541,9 @@
         }
         // News: headline + outlet. Whole row taps through to the article.
         if (s === 'news') {
-          const link = it.url ? ` role="button" tabindex="0" onclick="window.open('${esc(it.url)}','_blank')"` : '';
-          return `<div class="row${it.url ? ' link' : ''}"${link}><div class="main"><div class="t">${esc(it.title)}</div>
+          const safeUrl = /^https?:/i.test(it.url ?? '');
+          const link = safeUrl ? ` role="button" tabindex="0" data-url="${esc(it.url)}" onclick="window.open(this.dataset.url,'_blank','noopener')"` : '';
+          return `<div class="row${safeUrl ? ' link' : ''}"${link}><div class="main"><div class="t">${esc(it.title)}</div>
             <div class="sub">${esc(it.detail ?? '')}</div></div></div>`;
         }
         // Default (github, etc.): title + detail, urgent gets an accent bar.
@@ -728,10 +741,10 @@
       const total = g.estTotal != null
         ? `<span class="count est">Est. ~$${g.estTotal.toFixed(2)}${g.priceCity ? ' · ' + esc(g.priceCity) : ''}</span>`
         : `<span class="count">${g.count}</span>`;
-      const printBtn = `<button class="print" title="Print ${esc(g.label)}" aria-label="Print ${esc(g.label)}" onclick="printSection('${esc(g.source)}')">🖨</button>`;
+      const printBtn = `<button class="print" title="Print ${esc(g.label)}" aria-label="Print ${esc(g.label)}" data-source="${esc(g.source)}" onclick="printSection(this.dataset.source)">🖨</button>`;
       // Tasks / groceries lists get an "add item" box that writes back to Google Tasks.
       const addBox = g.addable ? `<div class="tile-foot">
-        <form class="additem" onsubmit="return addItem(event, '${esc(g.source)}')">
+        <form class="additem" data-source="${esc(g.source)}" onsubmit="return addItem(event, this.dataset.source)">
           <input type="text" placeholder="Add to ${esc(g.label)}…" aria-label="Add to ${esc(g.label)}" autocomplete="off" />
           <button type="submit" title="Add" aria-label="Add">+</button>
         </form></div>` : '';
@@ -837,8 +850,44 @@
       }
     }
 
+    // ---- Held receipts + the archive of what printed ----
+    const shortTime = (iso) => new Date(iso).toLocaleString('en-US',
+      { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', ...(TZ ? { timeZone: TZ } : {}) });
+
+    async function loadQueue() {
+      try {
+        const { held } = await (await fetch('/api/queue')).json();
+        $('held-sect').hidden = !held.length;
+        $('held').innerHTML = held.map((j) =>
+          `<span class="k">${esc(shortTime(j.queuedAt))}</span>`
+          + `<span>${esc(j.label)}${j.lastError ? ` — ${esc(j.lastError)}` : ''}</span>`).join('');
+      } catch (e) { $('held-sect').hidden = true; }
+    }
+
+    async function loadArchive() {
+      try {
+        const { receipts } = await (await fetch('/api/receipts')).json();
+        $('archive').innerHTML = receipts.slice(0, 10).map((r) =>
+          `<span class="k">${esc(shortTime(r.at))}</span>`
+          + `<span><a href="/api/receipts/${encodeURIComponent(r.id)}.png" target="_blank" rel="noopener">${esc(r.label)}</a>`
+          + `${r.printed ? '' : ' (not printed)'}</span>`).join('') || '—';
+      } catch (e) { $('archive').textContent = 'archive unavailable'; }
+    }
+
+    async function retryHeld() {
+      await post('/api/queue/flush', 'Retrying held receipts…', null, true);
+      loadQueue();
+      loadArchive();
+    }
+
+    async function discardHeld() {
+      if (!confirm('Discard all held receipts? They will not print.')) return;
+      await post('/api/queue/clear', 'Discarding held receipts…', null, true);
+      loadQueue();
+    }
+
     // ---- Settings modal open/close ----
-    function openModal() { $('modal').hidden = false; loadStatus(); loadPrinter(); }
+    function openModal() { $('modal').hidden = false; loadStatus(); loadPrinter(); loadQueue(); loadArchive(); }
     function closeModal() { $('modal').hidden = true; }
     $('gear').onclick = openModal;
     $('modal-close').onclick = closeModal;
@@ -860,7 +909,7 @@
     loadDashboard();
     loadStatus();
     setInterval(loadDashboard, 1000 * 60 * 5);   // refresh tiles every 5 min
-    setInterval(() => { if (!$('modal').hidden) loadPrinter(); }, 15000);
+    setInterval(() => { if (!$('modal').hidden) { loadPrinter(); loadQueue(); } }, 15000);
   </script>
 </body>
 </html>
