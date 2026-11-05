@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseIcs, isYearly, nextYearlyOccurrence, daysUntil, parseDt } from '../src/ics.js';
+import { parseIcs, isYearly, nextYearlyOccurrence, daysUntil, parseDt, occurrencesBetween } from '../src/ics.js';
 
 const SAMPLE = [
   'BEGIN:VCALENDAR',
@@ -32,7 +32,7 @@ test('parses events, times, and all-day flags', () => {
   const standup = events[0];
   assert.equal(standup.summary, 'Standup');
   assert.equal(standup.start.allDay, false);
-  assert.equal(new Date(standup.start.ms).getHours(), 9);
+  assert.equal(new Date(standup.start.ms).toISOString(), '2026-08-12T14:00:00.000Z'); // 9am CDT
   assert.equal(standup.end?.allDay, false);
 
   const bday = events[1];
@@ -90,4 +90,116 @@ test('daysUntil counts whole local days, not 24h blocks', () => {
   assert.equal(daysUntil(to, from), 1);
   assert.equal(daysUntil(from, from), 0);
   assert.equal(daysUntil(new Date(2026, 7, 10).getTime(), from), -2);
+});
+
+// ---- Recurrence, zones, exceptions -----------------------------------------
+// Assertions use real instants, so they hold whatever TZ the machine runs in.
+
+const feed = (...events: string[][]) =>
+  ['BEGIN:VCALENDAR', ...events.flatMap((e) => ['BEGIN:VEVENT', ...e, 'END:VEVENT']), 'END:VCALENDAR'].join('\r\n');
+const utc = (s: string) => Date.parse(s);
+const DAY = 86_400_000;
+const on = (ics: string, day: string) =>
+  occurrencesBetween(parseIcs(ics), utc(`${day}T00:00:00Z`), utc(`${day}T00:00:00Z`) + DAY);
+const starts = (evs: { start: { ms: number } }[]) => evs.map((e) => new Date(e.start.ms).toISOString());
+
+test('TEXT escapes in a summary are decoded', () => {
+  const [ev] = parseIcs(feed(['UID:1', 'SUMMARY:Dinner\\, then drinks\; bring wine\\nand a C:\\\\ drive', 'DTSTART:20261104T150000Z']));
+  assert.equal(ev.summary, 'Dinner, then drinks; bring wine and a C:\\ drive');
+});
+
+test('a TZID start is the real instant, in and out of DST', () => {
+  const at = (v: string, tz: string) => new Date(parseDt(v, tz)!.ms).toISOString();
+  assert.equal(at('20261104T090000', 'America/New_York'), '2026-11-04T14:00:00.000Z'); // EST
+  assert.equal(at('20260704T090000', 'America/New_York'), '2026-07-04T13:00:00.000Z'); // EDT
+  assert.equal(at('20260704T090000', 'Europe/Berlin'), '2026-07-04T07:00:00.000Z');
+});
+
+test('an unknown TZID falls back to local rather than throwing', () => {
+  assert.equal(parseDt('20260704T090000', 'Central Standard Time')?.tz, undefined);
+});
+
+test('all-day dates ignore TZID', () => {
+  assert.equal(parseDt('20260704', 'Asia/Tokyo')?.allDay, true);
+  assert.equal(parseDt('20260704', 'Asia/Tokyo')?.tz, undefined);
+});
+
+test('a weekly series appears on matching days long after it started', () => {
+  const ics = feed(['UID:1', 'SUMMARY:Standup', 'DTSTART;TZID=America/Chicago:20250106T090000',
+    'DTEND;TZID=America/Chicago:20250106T093000', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE']);
+  const [wed] = on(ics, '2026-11-04');
+  assert.equal(new Date(wed.start.ms).toISOString(), '2026-11-04T15:00:00.000Z');
+  assert.equal(new Date(wed.end!.ms).toISOString(), '2026-11-04T15:30:00.000Z');
+  assert.equal(on(ics, '2026-11-05').length, 0); // Thursday
+});
+
+test('a recurring event keeps its wall-clock time across DST', () => {
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART;TZID=America/Chicago:20260105T090000', 'RRULE:FREQ=DAILY']);
+  assert.deepEqual(starts(on(ics, '2026-01-20')), ['2026-01-20T15:00:00.000Z']); // CST
+  assert.deepEqual(starts(on(ics, '2026-07-20')), ['2026-07-20T14:00:00.000Z']); // CDT
+});
+
+test('COUNT, UNTIL, and INTERVAL end and space a series', () => {
+  const base = ['UID:1', 'SUMMARY:x', 'DTSTART:20260105T150000Z'];
+  assert.equal(on(feed([...base, 'RRULE:FREQ=DAILY;COUNT=3']), '2026-01-07').length, 1);
+  assert.equal(on(feed([...base, 'RRULE:FREQ=DAILY;COUNT=3']), '2026-01-08').length, 0);
+  assert.equal(on(feed([...base, 'RRULE:FREQ=DAILY;INTERVAL=2']), '2026-01-06').length, 0);
+  assert.equal(on(feed([...base, 'RRULE:FREQ=DAILY;INTERVAL=2']), '2026-01-07').length, 1);
+});
+
+test('UNTIL is an instant: the final occurrence counts in zones east of UTC', () => {
+  // 09:00 in Berlin is 08:00Z, so wall time alone would compare past UNTIL.
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART;TZID=Europe/Berlin:20260105T090000',
+    'RRULE:FREQ=DAILY;UNTIL=20260107T080000Z']);
+  assert.equal(on(ics, '2026-01-07').length, 1);
+  assert.equal(on(ics, '2026-01-08').length, 0);
+});
+
+test('EXDATE removes one occurrence', () => {
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART;TZID=America/Chicago:20260105T090000',
+    'RRULE:FREQ=DAILY', 'EXDATE;TZID=America/Chicago:20260107T090000,20260108T090000']);
+  assert.equal(on(ics, '2026-01-06').length, 1);
+  assert.equal(on(ics, '2026-01-07').length, 0);
+  assert.equal(on(ics, '2026-01-08').length, 0);
+});
+
+test('a moved occurrence appears at its new time only', () => {
+  const ics = feed(
+    ['UID:1', 'SUMMARY:x', 'DTSTART:20260105T150000Z', 'RRULE:FREQ=DAILY'],
+    ['UID:1', 'SUMMARY:x moved', 'RECURRENCE-ID:20260107T150000Z', 'DTSTART:20260107T180000Z'],
+  );
+  const day = on(ics, '2026-01-07');
+  assert.deepEqual(day.map((e) => e.summary), ['x moved']);
+  assert.deepEqual(starts(day), ['2026-01-07T18:00:00.000Z']);
+});
+
+test('cancelled events and cancelled occurrences are left out', () => {
+  assert.equal(on(feed(['UID:1', 'SUMMARY:x', 'STATUS:CANCELLED', 'DTSTART:20260105T150000Z']), '2026-01-05').length, 0);
+  const series = feed(
+    ['UID:2', 'SUMMARY:x', 'DTSTART:20260105T150000Z', 'RRULE:FREQ=DAILY'],
+    ['UID:2', 'SUMMARY:x', 'STATUS:CANCELLED', 'RECURRENCE-ID:20260107T150000Z', 'DTSTART:20260107T150000Z'],
+  );
+  assert.equal(on(series, '2026-01-07').length, 0);
+  assert.equal(on(series, '2026-01-08').length, 1);
+});
+
+test('an all-day series lands on its calendar date', () => {
+  const ics = feed(['UID:1', 'SUMMARY:x', 'DTSTART;VALUE=DATE:20200214', 'RRULE:FREQ=YEARLY']);
+  const [ev] = occurrencesBetween(parseIcs(ics), new Date(2026, 1, 14).getTime(), new Date(2026, 1, 15).getTime());
+  assert.equal(ev.start.allDay, true);
+  assert.equal(new Date(ev.start.ms).getDate(), 14);
+});
+
+test('an unreadable RRULE skips that series instead of sinking the feed', () => {
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const ics = feed(
+      ['UID:1', 'SUMMARY:bad', 'DTSTART:20260105T150000Z', 'RRULE:FREQ=NOPE'],
+      ['UID:2', 'SUMMARY:fine', 'DTSTART:20260105T160000Z'],
+    );
+    assert.deepEqual(on(ics, '2026-01-05').map((e) => e.summary), ['fine']);
+  } finally {
+    console.warn = warn;
+  }
 });

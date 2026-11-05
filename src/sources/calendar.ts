@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { parseIcs } from '../ics.js';
+import { occurrencesBetween, parseIcs } from '../ics.js';
 import type { Source, NotificationItem, DigestContext } from './types.js';
 
 /** Local midnight of the day `offset` days from now. */
@@ -9,9 +9,6 @@ function dayStart(offset = 0): Date {
   d.setDate(d.getDate() + offset);
   return d;
 }
-
-const sameLocalDay = (a: number, b: number) =>
-  new Date(a).toDateString() === new Date(b).toDateString();
 
 /** Compact clock time in the configured tz, e.g. "9:00a", "10:30p". */
 function clock(ms: number): string {
@@ -29,11 +26,13 @@ export const calendarSource: Source = {
     if (!res.ok) throw new Error(`Calendar ICS ${res.status}`);
 
     // The evening digest asks for tomorrow so you see it while you can still prep.
-    const target = dayStart(ctx?.day === 'tomorrow' ? 1 : 0).getTime();
+    const offset = ctx?.day === 'tomorrow' ? 1 : 0;
+    const from = dayStart(offset).getTime();
+    const to = dayStart(offset + 1).getTime();
 
     const items: NotificationItem[] = [];
-    for (const ev of parseIcs(await res.text())) {
-      if (!ev.summary || !sameLocalDay(ev.start.ms, target)) continue;
+    for (const ev of occurrencesBetween(parseIcs(await res.text()), from, to)) {
+      if (!ev.summary) continue;
       // Timeline range: "9:00a-10:30a", or just the start if no end, or "all day".
       const range = ev.start.allDay
         ? 'all day'

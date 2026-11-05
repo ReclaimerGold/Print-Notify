@@ -76,7 +76,8 @@ export const birthdaysSource: Source = {
     // name. Filter only when we're sharing the main calendar's feed.
     const dedicated = icsUrl !== config.sources.calendar.icsUrl;
     const candidates = events.filter(
-      (ev) => ev.summary && isYearly(ev) && (dedicated || !keywords.length || looksLikeBirthday(ev)),
+      (ev) => ev.summary && ev.status !== 'CANCELLED' && isYearly(ev) &&
+        (dedicated || !keywords.length || looksLikeBirthday(ev)),
     );
 
     // The evening digest counts from tomorrow, so "today" entries — already

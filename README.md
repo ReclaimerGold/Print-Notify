@@ -207,7 +207,7 @@ src/
   printerInfo.ts      lpstat-based printer status
   archive.ts          rolling archive of rendered receipts
   bitmap.ts           bridges layout to Python bitmap renderers (cached)
-  ics.ts              shared iCalendar parsing + yearly-recurrence projection
+  ics.ts              shared iCalendar parsing + recurrence expansion
   logo.ts             logo bitmap header
   weatherArt.ts       WMO code -> icon group
   googleTasks.ts      Google Tasks OAuth + API client
