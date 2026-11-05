@@ -89,12 +89,25 @@ async function printDown(alerts: VsAlert[]): Promise<void> {
   await printReceipt(blocks, 'Sentinel Alert');
 }
 
-/** Run one poll cycle; prints on newly-detected DOWN monitors only. */
-export async function runSentinel(): Promise<SentinelEvent[]> {
+let running: Promise<SentinelEvent[]> | undefined;
+
+/**
+ * Run one poll cycle; prints on newly-detected DOWN monitors only. A tick that
+ * lands while the last is still running joins it, so a slow API can't print the
+ * same outage twice. `fetcher` and `print` are injectable for tests.
+ */
+export function runSentinel(fetcher = fetchOpenAlerts, print = printDown): Promise<SentinelEvent[]> {
+  running ??= pollSentinel(fetcher, print).finally(() => {
+    running = undefined;
+  });
+  return running;
+}
+
+async function pollSentinel(fetcher: typeof fetchOpenAlerts, print: typeof printDown): Promise<SentinelEvent[]> {
   lastCheck = new Date().toISOString();
   if (provider() !== 'visualsentinel') return [];
   try {
-    const open = await fetchOpenAlerts();
+    const open = await fetcher();
     const down = open.filter(isDownAlert);
     lastDownAlerts = down;
     lastOtherOpen = open.length - down.length;
@@ -112,13 +125,16 @@ export async function runSentinel(): Promise<SentinelEvent[]> {
 
     const fresh = down.filter((a) => !notified.has(a.id));
 
+    // Print first: if this throws, `notified` is untouched and the next tick
+    // retries, rather than an outage being recorded as told but never printed.
+    if (fresh.length) await print(fresh);
+
     // notified = exactly the currently-open down ids. A resolved outage drops
     // out (so an up→down again gets a new id and re-notifies); an ongoing one
     // stays in and never repeats.
     notified = downIds;
     saveState();
 
-    if (fresh.length) await printDown(fresh);
     lastError = undefined;
     return fresh.map((a) => ({ name: alertName(a), to: 'down' as const, detail: a.message }));
   } catch (e) {

@@ -265,10 +265,24 @@ async function printWeatherAlerts(events: AlertEvent[]): Promise<void> {
   await printReceipt(await buildAlertBlocks(events), 'Weather Alert');
 }
 
-/** Run one poll cycle; prints on issued/updated/expired transitions only.
- *  `fetcher` is injectable for tests; defaults to the live NWS client. */
-export async function runWeatherAlerts(
+let running: Promise<AlertEvent[]> | undefined;
+
+/** Run one poll cycle; prints on issued/updated/expired transitions only. A tick
+ *  that lands while the last is still running joins it, so a slow API can't print
+ *  an alert twice. `fetcher` and `print` are injectable for tests. */
+export function runWeatherAlerts(
   fetcher: () => Promise<NwsAlert[]> = fetchActiveAlerts,
+  print: (events: AlertEvent[]) => Promise<void> = printWeatherAlerts,
+): Promise<AlertEvent[]> {
+  running ??= pollWeatherAlerts(fetcher, print).finally(() => {
+    running = undefined;
+  });
+  return running;
+}
+
+async function pollWeatherAlerts(
+  fetcher: () => Promise<NwsAlert[]>,
+  print: (events: AlertEvent[]) => Promise<void>,
 ): Promise<AlertEvent[]> {
   lastCheck = new Date().toISOString();
   // Warm the home-point context so the dashboard status has it even before the
@@ -313,10 +327,13 @@ export async function runWeatherAlerts(
       }
     }
 
+    // Print first: if this throws, `active` is untouched and the next tick
+    // retries, rather than a warning being recorded as seen but never printed.
+    if (events.length) await print(events);
+
     active = new Map(imm.map((a) => [a.id, toStored(a)]));
     saveState();
 
-    if (events.length) await printWeatherAlerts(events);
     lastError = undefined;
     return events;
   } catch (e) {

@@ -6,15 +6,33 @@
 // receipt goes through here, which asks the printer how it's doing first, and
 // holds the job on disk when the answer is "not right now".
 //
-// Held jobs are ordered block lists, not ESC/POS bytes: blocks are JSON, they
-// survive a restart, and they re-render against whatever the bitmap cache holds.
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+// Held jobs are ordered block lists, not ESC/POS bytes: blocks are JSON, and each
+// job keeps its own copies of its images under data/held/, because the bitmap
+// cache lives in the temp dir and a reboot would otherwise strand the job.
+//
+// Everything that touches the queue file runs through `locked`. The retry timer,
+// the flush after each print, a dashboard click and a newly held job can all
+// overlap, and an unserialized read-modify-write here prints jobs twice or
+// silently overwrites a job held a moment earlier.
+import { existsSync } from 'node:fs';
+import { copyFile, mkdir, readFile, rename, rm } from 'node:fs/promises';
+import { extname, join, resolve } from 'node:path';
 import { config } from './config.js';
+import { writeJson } from './jsonFile.js';
 import { getPrinterInfo, type PrinterInfo } from './printerInfo.js';
 import type { Block } from './digest.js';
 
 const FILE = 'data/print-queue.json';
+const HELD_DIR = 'data/held';
+
+// A promise chain: each critical section starts once the previous one settles.
+let tail: Promise<unknown> = Promise.resolve();
+
+function locked<T>(fn: () => Promise<T>): Promise<T> {
+  const run = tail.then(fn, fn);
+  tail = run.catch(() => undefined);
+  return run;
+}
 
 export interface HeldJob {
   id: string;
@@ -62,18 +80,48 @@ export function healthFootnote(info: PrinterInfo): string | undefined {
 }
 
 async function loadQueue(): Promise<HeldJob[]> {
+  let raw: string;
   try {
-    const parsed = JSON.parse(await readFile(FILE, 'utf8'));
-    return Array.isArray(parsed) ? parsed : [];
+    raw = await readFile(FILE, 'utf8');
   } catch {
-    return [];
+    return []; // nothing held yet
   }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    /* handled below */
+  }
+  // The next save would overwrite it, so keep the evidence and say so.
+  const aside = `${FILE}.corrupt-${Date.now()}`;
+  await rename(FILE, aside).catch(() => undefined);
+  console.error(`[queue] ${FILE} was unreadable; moved to ${aside}`);
+  return [];
 }
 
-async function saveQueue(jobs: HeldJob[]): Promise<void> {
-  await mkdir(dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(jobs, null, 2));
+const saveQueue = (jobs: HeldJob[]): Promise<void> => writeJson(FILE, jobs, 2);
+
+/** Copy a job's images out of the temp-dir cache so it survives a reboot. */
+async function keepImages(id: string, blocks: Block[]): Promise<Block[]> {
+  const dir = resolve(HELD_DIR, id);
+  await mkdir(dir, { recursive: true });
+  return Promise.all(blocks.map(async (b, i) => {
+    if (b.type !== 'image') return b;
+    const path = join(dir, `${i}${extname(b.path)}`);
+    try {
+      await copyFile(b.path, path);
+      return { ...b, path };
+    } catch {
+      return b; // flush() reports the job if this image is really gone
+    }
+  }));
 }
+
+const releaseImages = (jobs: HeldJob[]) =>
+  Promise.all(jobs.map((j) => rm(resolve(HELD_DIR, j.id), { recursive: true, force: true })));
+
+const missingImage = (job: HeldJob) =>
+  job.blocks.find((b) => b.type === 'image' && !existsSync(b.path));
 
 /** Drop jobs that have aged out, newest-first-capped to maxJobs. */
 function prune(jobs: HeldJob[]): { kept: HeldJob[]; dropped: HeldJob[] } {
@@ -145,19 +193,30 @@ export async function submit(label: string, blocks: Block[]): Promise<SubmitResu
     }
   }
 
-  const jobs = await loadQueue();
-  jobs.push({ id: nextId(), label, blocks, queuedAt: Date.now(), attempts: reason ? 1 : 0, lastError: reason });
-  const { kept, dropped } = prune(jobs);
-  await saveQueue(kept);
-  if (dropped.length) console.warn(`[queue] dropped ${dropped.length} stale job(s)`);
-  console.warn(`[queue] held "${label}" — ${reason} (${kept.length} waiting)`);
-  return { printed: false, heldReason: reason };
+  const heldReason = reason;
+  return locked(async () => {
+    const id = nextId();
+    const jobs = await loadQueue();
+    jobs.push({ id, label, blocks: await keepImages(id, blocks), queuedAt: Date.now(), attempts: 1, lastError: heldReason });
+    const { kept, dropped } = prune(jobs);
+    await saveQueue(kept);
+    await releaseImages(dropped);
+    if (dropped.length) console.warn(`[queue] dropped ${dropped.length} stale job(s)`);
+    console.warn(`[queue] held "${label}" — ${heldReason} (${kept.length} waiting)`);
+    return { printed: false, heldReason };
+  });
 }
 
 /** Try to print everything held. Stops at the first failure to preserve order. */
-export async function flush(): Promise<{ printed: number; remaining: number; reason?: string }> {
-  if (!render) throw new Error('print queue has no renderer');
+export function flush(): Promise<{ printed: number; remaining: number; reason?: string }> {
+  return locked(flushHeld);
+}
+
+async function flushHeld(): Promise<{ printed: number; remaining: number; reason?: string }> {
+  const print = render;
+  if (!print) throw new Error('print queue has no renderer');
   const { kept, dropped } = prune(await loadQueue());
+  await releaseImages(dropped);
   if (dropped.length) console.warn(`[queue] dropped ${dropped.length} stale job(s)`);
   if (!kept.length) {
     if (dropped.length) await saveQueue(kept);
@@ -174,10 +233,23 @@ export async function flush(): Promise<{ printed: number; remaining: number; rea
   let printed = 0;
   while (kept.length) {
     const job = kept[0];
+    // A lost image can never succeed, so retrying would only block every job
+    // behind it until it aged out. Give it up loudly and keep going.
+    const gone = missingImage(job);
+    if (gone) {
+      console.error(`[queue] dropping "${job.label}": missing ${(gone as { path: string }).path}`);
+      kept.shift();
+      await saveQueue(kept);
+      await releaseImages([job]);
+      continue;
+    }
     try {
-      await render(job.blocks);
+      await print(job.blocks);
       kept.shift();
       printed++;
+      // Save per job, so a crash mid-backlog can't reprint what's already out.
+      await saveQueue(kept);
+      await releaseImages([job]);
     } catch (e) {
       // Leave it at the head of the queue; order is the point of a backlog.
       job.attempts++;
@@ -208,10 +280,13 @@ export async function queueStatus(): Promise<{
 }
 
 /** Discard every held job (dashboard "clear" action). Returns how many went. */
-export async function clearQueue(): Promise<number> {
-  const jobs = await loadQueue();
-  await saveQueue([]);
-  return jobs.length;
+export function clearQueue(): Promise<number> {
+  return locked(async () => {
+    const jobs = await loadQueue();
+    await saveQueue([]);
+    await releaseImages(jobs);
+    return jobs.length;
+  });
 }
 
 let timer: NodeJS.Timeout | null = null;

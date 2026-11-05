@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { config } from './config.js';
 import { fetchAll } from './sources/index.js';
 import { printDigest, printAlert } from './digest.js';
-import { filterUnseen } from './store.js';
+import { filterUnseen, markSeen } from './store.js';
 import { startSentinel } from './sentinel.js';
 import { startWeatherAlerts } from './weatherAlerts.js';
 import { startPrintQueue } from './printQueue.js';
@@ -42,15 +42,31 @@ export async function runEveningDigest(title = 'Evening Digest'): Promise<number
   return runDigest(title, { day: 'tomorrow' });
 }
 
-/** Poll sources and print only NEW urgent items (deduped via the store). */
-export async function runPoll(): Promise<number> {
-  const { items, errors } = await fetchAll();
+async function pollOnce(fetchItems: typeof fetchAll, print: typeof printAlert): Promise<number> {
+  const { items, errors } = await fetchItems();
   if (errors.length) console.warn('[poll] source errors:', errors);
   const urgent = items.filter((i) => i.severity === 'urgent');
   const fresh = await filterUnseen(urgent);
-  if (fresh.length) await printAlert(fresh);
+  if (fresh.length) {
+    await print(fresh);
+    await markSeen(fresh); // after printing, so a failure retries next poll
+  }
   state.lastPoll = new Date().toISOString();
   return fresh.length;
+}
+
+let polling: Promise<number> | undefined;
+
+/**
+ * Poll sources and print only NEW urgent items (deduped via the store). A manual
+ * poll that lands during the cron's joins it rather than printing the same
+ * alert twice. `fetchItems` and `print` are injectable for tests.
+ */
+export function runPoll(fetchItems = fetchAll, print = printAlert): Promise<number> {
+  polling ??= pollOnce(fetchItems, print).finally(() => {
+    polling = undefined;
+  });
+  return polling;
 }
 
 export function startScheduler(): void {
