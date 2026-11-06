@@ -3,6 +3,7 @@
 // and (for the dashboard's two-way sync) patches task completion status.
 // Read-write scope: https://www.googleapis.com/auth/tasks
 // (Reads keep working under the old .../tasks.readonly token; writes need re-auth.)
+import { timedFetch } from './http.js';
 import { config } from './config.js';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -15,7 +16,7 @@ export async function getAccessToken(): Promise<string> {
   if (cached && cached.exp > now + 60_000) return cached.token;
 
   const { clientId, clientSecret, refreshToken } = config.sources.googleTasks;
-  const res = await fetch(TOKEN_URL, {
+  const res = await timedFetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -33,7 +34,7 @@ export async function getAccessToken(): Promise<string> {
 
 async function api(path: string, init?: RequestInit): Promise<any> {
   const token = await getAccessToken();
-  const res = await fetch(API + path, {
+  const res = await timedFetch(API + path, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,

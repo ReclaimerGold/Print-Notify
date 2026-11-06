@@ -28,8 +28,13 @@ import { receiptImage } from './src/bitmap.js';
 const png = await receiptImage(await buildDigestBlocks('Test', items), 42);
 ```
 
-For unit-ish checks, mock `globalThis.fetch` and call a source's `fetch()`
-directly — see the ad-hoc patterns used during development.
+For unit-ish checks, run `npm test` (`node --test` over `test/*.test.ts`). Pure
+helpers are exported for exactly this reason — parsing, labelling, and severity
+logic are tested directly, without touching the network. `test/digest.test.ts`
+snapshots both the digest's block skeleton and the section rows; when a layout
+change is intended, re-record with `SNAPSHOT_UPDATE=1 npm test` and read the
+diff before committing it. To exercise a source against its live API, mock
+`globalThis.fetch` and call the source's `fetch()` directly.
 
 ## Conventions
 
@@ -51,12 +56,12 @@ scheduler, and dashboard pick it up automatically.
 
    ```ts
    import { config } from '../config.js';
-   import type { Source, NotificationItem } from './types.js';
+   import type { Source, NotificationItem, DigestContext } from './types.js';
 
    export const mySource: Source = {
      name: 'my-source',
      enabled: Boolean(config.sources.mySource?.enabled),
-     async fetch(): Promise<NotificationItem[]> {
+     async fetch(ctx?: DigestContext): Promise<NotificationItem[]> {
        // ...fetch + map to NotificationItem[]
      },
    };
@@ -64,6 +69,19 @@ scheduler, and dashboard pick it up automatically.
 
 2. Add any config to `src/config.ts` (gate `enabled` on it).
 3. Register it in `src/sources/index.ts` (`sources` array).
+4. Add it to `SOURCE_ORDER` in `src/digest.ts` so its section lands somewhere
+   deliberate; unlisted sources sort to the end. If it should render as a styled
+   bitmap list rather than plain text lines, add it to `LIST_SECTIONS` too.
+
+### The digest context
+
+`ctx` carries the horizon: `{ day: 'today' }` for the morning digest and every
+ad-hoc fetch, `{ day: 'tomorrow' }` for the evening one. It's optional — a source
+that can't meaningfully shift (news, GitHub) just ignores it. A source that can
+should, because the evening receipt's whole value is being about a day you can
+still prepare for. Sources that *do* shift must also key their item `id`s by the
+day they describe, or the evening item will collide with the morning's in
+`data/seen.json` and get deduped away.
 
 ### `NotificationItem` fields
 
@@ -75,6 +93,7 @@ scheduler, and dashboard pick it up automatically.
 | `severity` | `info` \| `notice` \| `urgent` (only `urgent` triggers the ad-hoc poll print) |
 | `image` | absolute path to a bitmap printed above the item (e.g. a weather icon) |
 | `checked` | if set, the item renders as a pen box `[ ]` / `[x]` |
+| `icon` | a literal marker glyph for the styled list row (e.g. `★`); pick one the bundled fonts actually carry, or it prints as a `.notdef` box |
 | `timestamp` | ms epoch; used for global ordering (stable sort preserves per-source order for equal timestamps) |
 
 ## The block model (print === preview)

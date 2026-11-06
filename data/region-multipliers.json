@@ -1,0 +1,8 @@
+{
+  "_comment": "Cost-of-food index applied to the U.S. city-average prices in grocery-prices.json (sourced from BLS). US = 1.00. The Midwest tracks the U.S. average within ~1% (measured against BLS regional series), so ~1.00 is correct for Sioux Falls; the other regions are rough estimates, refine as desired.",
+  "Midwest": 0.99,
+  "South": 0.98,
+  "Northeast": 1.12,
+  "West": 1.10,
+  "US": 1.00
+}

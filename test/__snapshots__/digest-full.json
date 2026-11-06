@@ -1,0 +1,132 @@
+[
+  {
+    "type": "image",
+    "kind": "ferrix-logo-print",
+    "align": "center"
+  },
+  {
+    "type": "image",
+    "kind": "title",
+    "align": "center"
+  },
+  {
+    "type": "text",
+    "text": "<TIMESTAMP>",
+    "align": "center"
+  },
+  {
+    "type": "rule"
+  },
+  {
+    "type": "image",
+    "kind": "section",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "list",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "section",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "list",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "checklist",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "section",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "list",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "section",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "list",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "section",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "list",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "section",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "image",
+    "kind": "list",
+    "align": "center"
+  },
+  {
+    "type": "space"
+  },
+  {
+    "type": "rule"
+  },
+  {
+    "type": "text",
+    "text": "9 items",
+    "align": "center"
+  }
+]

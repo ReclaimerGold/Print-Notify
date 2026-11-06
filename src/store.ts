@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { writeJson } from './jsonFile.js';
 
 const FILE = 'data/seen.json';
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // forget ids after 7 days
@@ -14,19 +15,26 @@ async function load(): Promise<Seen> {
 }
 
 async function save(seen: Seen): Promise<void> {
-  await writeFile(FILE, JSON.stringify(seen));
+  await writeJson(FILE, seen);
 }
 
-/** Return the subset of ids not seen before, and record them as seen now. */
+/** The subset of items not seen before. Records nothing: see markSeen. */
 export async function filterUnseen<T extends { id: string }>(items: T[]): Promise<T[]> {
+  const seen = await load();
+  return items.filter((it) => !(it.id in seen));
+}
+
+/**
+ * Record items as handled. Call this only once they've printed (or been safely
+ * held), so a failed print is retried on the next poll instead of lost.
+ */
+export async function markSeen(items: { id: string }[]): Promise<void> {
   const seen = await load();
   const now = Date.now();
 
   // prune expired entries so the file doesn't grow forever
   for (const [id, ts] of Object.entries(seen)) if (now - ts > TTL_MS) delete seen[id];
 
-  const fresh = items.filter((it) => !(it.id in seen));
-  for (const it of fresh) seen[it.id] = now;
+  for (const it of items) seen[it.id] = now;
   await save(seen);
-  return fresh;
 }

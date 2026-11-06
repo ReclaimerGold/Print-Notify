@@ -1,18 +1,25 @@
 """Compose the rich weather panel into one 1-bit PNG:
 
   - a 2-hourly temperature line graph for the next ~24 hours, and
-  - a sun & moon row (sunrise / sunset + a drawn moon-phase disc + phase name),
-  - a compact humidity / UV stats line.
+  - a sun & moon row (sunrise / sunset / day length + a drawn moon-phase disc),
+  - a compact humidity / UV / air-quality / pollen stats block.
 
 Input:  --spec weather.json   --out path.png
   {
     "width": 504,
+    "heading": "NEXT 24 HOURS",
     "hourly": [{"label":"9a","temp":72}, ...],
     "hi": 82, "lo": 58,
     "sun": {"sunrise":"5:57 AM","sunset":"9:07 PM"},
+    "daylight": "14h 08m  ·  2m 32s shorter",
     "moon": {"name":"Waxing Gibbous","illum":0.78,"waxing":true},
-    "humidity": 55, "uv": 6
+    "humidity": 55, "uv": 6,
+    "aqi": 39, "aqiCategory": "Good", "pm25": 5.3,
+    "pollen": {"grass": 12, "tree": 0, "ragweed": 4}
   }
+
+Every field below "sun" is optional — the panel drops any line it has no data
+for, so a point outside the pollen model's domain simply prints a shorter panel.
 """
 import argparse
 import json
@@ -44,7 +51,7 @@ def ctext(d, cx, y, s, f, fill=0):
 def draw_graph(img, d, spec, x0, y0, W, H):
     pts = spec.get("hourly", [])
     f_cap = font(24)
-    ctext(d, x0 + W / 2, y0, "NEXT 24 HOURS", f_cap)
+    ctext(d, x0 + W / 2, y0, spec.get("heading") or "NEXT 24 HOURS", f_cap)
     top = y0 + 34
     if len(pts) < 2:
         d.text((x0, top), "hourly data unavailable", font=font(18, False), fill=0)
@@ -104,12 +111,15 @@ def draw_sun_moon(img, d, spec, x0, y, W):
     f_lbl = font(17)
     f_sub = font(15, False)
 
-    # left: sunrise / sunset stacked
+    # left: sunrise / sunset / day length stacked
     lx = x0 + 8
     if sun.get("sunrise"):
         d.text((lx, y + 2), f"Sunrise  {sun['sunrise']}", font=f_lbl, fill=0)
     if sun.get("sunset"):
         d.text((lx, y + 26), f"Sunset   {sun['sunset']}", font=f_lbl, fill=0)
+    # Day length plus how it moved since yesterday — the delta is what you feel.
+    if spec.get("daylight"):
+        d.text((lx, y + 51), f"Daylight  {spec['daylight']}", font=f_sub, fill=0)
 
     # right: moon disc + phase name + illumination, right-aligned so the longest
     # phase name ("Waning Crescent") always fits within the paper width.
@@ -123,11 +133,46 @@ def draw_sun_moon(img, d, spec, x0, y, W):
     draw_moon(img, cx, cy, r, float(moon.get("illum", 0)), bool(moon.get("waxing", True)))
     d.text((tx, y + 6), name, font=f_lbl, fill=0)
     d.text((tx, y + 28), illum_str, font=f_sub, fill=0)
-    return y + 56
+    return y + (72 if spec.get("daylight") else 56)
+
+def stat_lines(spec):
+    """The centered footer rows: conditions, then air, then pollen. Each row is
+    omitted entirely when it has nothing in it."""
+    rows = []
+
+    bits = []
+    if spec.get("humidity") is not None:
+        bits.append(f"Humidity {spec['humidity']}%")
+    if spec.get("uv") is not None:
+        bits.append(f"UV {spec['uv']}")
+    if bits:
+        rows.append("     ·     ".join(bits))
+
+    air = []
+    if spec.get("aqi") is not None:
+        cat = spec.get("aqiCategory")
+        air.append(f"AQI {spec['aqi']}" + (f" ({cat})" if cat else ""))
+    if spec.get("pm25") is not None:
+        air.append(f"PM2.5 {spec['pm25']}")
+    if air:
+        rows.append("     ·     ".join(air))
+
+    # Pollen is a European-model product; outside its domain every count is null
+    # and this row never appears. Zero counts are dropped too — "Grass 0" is noise.
+    pollen = spec.get("pollen") or {}
+    grains = [(lbl, pollen.get(k)) for k, lbl in
+              (("tree", "Tree"), ("grass", "Grass"), ("ragweed", "Ragweed"))]
+    shown = [f"{lbl} {v:g}" for lbl, v in grains if v]
+    if shown:
+        rows.append("Pollen   " + "     ·     ".join(shown))
+
+    return rows
+
 
 def render(spec, out):
     W = spec.get("width", 504)
-    H = 150 + 70 + 26
+    rows = stat_lines(spec)
+    H = 150 + 90 + 26 * (len(rows) + 1)
     img = Image.new("L", (W, H), 255)
     d = ImageDraw.Draw(img)
 
@@ -135,15 +180,12 @@ def render(spec, out):
     d.line([8, y, W - 8, y], fill=0, width=1)   # divider
     y = draw_sun_moon(img, d, spec, 0, y + 8, W)
 
-    # humidity / UV footer
-    bits = []
-    if spec.get("humidity") is not None:
-        bits.append(f"Humidity {spec['humidity']}%")
-    if spec.get("uv") is not None:
-        bits.append(f"UV {spec['uv']}")
-    if bits:
-        ctext(d, W / 2, y + 4, "     ·     ".join(bits), font(16, False))
-        y += 26
+    f_stat = font(16, False)
+    for row in rows:
+        ctext(d, W / 2, y + 4, row, f_stat)
+        y += 24
+    if rows:
+        y += 2
 
     img.crop((0, 0, W, min(H, y + 4))).convert("1", dither=Image.NONE).save(out)
 

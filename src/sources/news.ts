@@ -1,3 +1,4 @@
+import { timedFetch } from '../http.js';
 import { config } from '../config.js';
 import type { Source, NotificationItem } from './types.js';
 
@@ -29,7 +30,7 @@ export const newsSource: Source = {
   async fetch(): Promise<NotificationItem[]> {
     const q = encodeURIComponent(`${config.sources.news.query} when:2d`);
     const url = `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'print-notify' } });
+    const res = await timedFetch(url, { headers: { 'User-Agent': 'print-notify' } });
     if (!res.ok) throw new Error(`Google News ${res.status}`);
     const xml = await res.text();
 

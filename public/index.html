@@ -7,13 +7,18 @@
   <style>
     :root {
       --bg:#eef0f3; --card:#fff; --ink:#1b2430; --muted:#6b7280; --line:#e2e5ea;
-      --accent:#26374a; --accent-ink:#fff;
+      --accent:#26374a; --accent-ink:#fff; --accent-soft:color-mix(in srgb, var(--accent) 12%, transparent);
       --green:#16a34a; --amber:#d97706; --red:#dc2626; --grey:#9ca3af;
-      --radius:18px; --shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.06);
-      --tap:52px;
+      --radius:20px; --radius-sm:13px;
+      --shadow:0 1px 2px rgba(0,0,0,.04), 0 12px 34px rgba(0,0,0,.07);
+      /* Touch scale: --tap is the minimum comfortable finger target. --gap is the
+         board's breathing room. Both step up a notch on coarse (touch) pointers. */
+      --tap:52px; --gap:1.1rem; --pad:1.25rem;
     }
+    @media (pointer:coarse) { :root { --tap:60px; --gap:1.25rem; --pad:1.4rem; } }
     @media (prefers-color-scheme: dark) {
-      :root { --bg:#0c0f14; --card:#161c25; --ink:#e7eaef; --muted:#93a0b1; --line:#28313d; --accent:#3d5673; }
+      :root { --bg:#0c0f14; --card:#161c25; --ink:#e7eaef; --muted:#93a0b1; --line:#28313d;
+        --accent:#3d5673; --accent-soft:color-mix(in srgb, var(--accent) 26%, transparent); }
     }
     * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     /* ---- Custom scrollbars (thin, themed) instead of native chrome ---- */
@@ -24,118 +29,125 @@
       border-radius:9px; border:2px solid transparent; background-clip:padding-box; }
     ::-webkit-scrollbar-thumb:hover { background:color-mix(in srgb, var(--ink) 36%, transparent); background-clip:padding-box; }
     ::-webkit-scrollbar-corner { background:transparent; }
-    html, body { height:100%; }
-    /* Desktop/landscape: a fixed-height flex column so the whole dashboard fills
-       the viewport and the PAGE never scrolls — tiles scroll internally instead.
-       The mobile media query at the bottom relaxes this to a normal scroll page. */
+    html, body { min-height:100%; }
+    /* Touch-first: the header stays pinned and the BOARD scrolls as one surface
+       with native momentum — no thin internal tile scrollbars to hunt for on a
+       finger display. Tiles size to their content and flow into a responsive
+       grid, so nothing is ever hidden below an internal fold. */
     body { margin:0; background:var(--bg); color:var(--ink);
-      font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased;
-      height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+      font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased;
+      min-height:100dvh; display:flex; flex-direction:column;
+      overflow-x:hidden; overscroll-behavior-y:contain; }
 
     /* ---- Top bar ---- */
-    .topbar { position:sticky; top:0; flex:0 0 auto; z-index:20; display:flex; align-items:center; gap:1rem;
-      padding:.7rem 1.1rem; background:var(--card); border-bottom:1px solid var(--line);
-      box-shadow:0 1px 10px rgba(0,0,0,.04); }
+    .topbar { position:sticky; top:0; flex:0 0 auto; z-index:30; display:flex; align-items:center; gap:1rem;
+      flex-wrap:wrap; row-gap:.6rem;
+      padding:.7rem 1.15rem; background:color-mix(in srgb, var(--card) 88%, transparent);
+      backdrop-filter:saturate(1.4) blur(10px); -webkit-backdrop-filter:saturate(1.4) blur(10px);
+      border-bottom:1px solid var(--line); box-shadow:0 1px 14px rgba(0,0,0,.05); }
     .topbar img { height:40px; width:auto; }
+    .brand-wrap { display:flex; align-items:center; gap:.7rem; flex:0 0 auto; }
     /* Show the dark-ink logo on light backgrounds, the light logo on dark. */
     .topbar .logo-dark { display:none; }
     @media (prefers-color-scheme: dark) {
       .topbar .logo-light { display:none; }
       .topbar .logo-dark { display:block; }
     }
-    .brand { font-size:1.2rem; font-weight:800; letter-spacing:-.01em; }
-    .clock { margin-left:auto; text-align:right; line-height:1.1; }
-    .clock .time { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
-    .clock .date { font-size:.8rem; color:var(--muted); }
+    .brand { font-size:1.2rem; font-weight:800; letter-spacing:-.01em; white-space:nowrap; }
+    .clock { margin-left:auto; text-align:right; line-height:1.05; padding-left:.4rem; }
+    .clock .time { font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+    .clock .date { font-size:.8rem; color:var(--muted); white-space:nowrap; }
     .chip { font-size:.7rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
       color:var(--amber); border:1.5px solid var(--amber); border-radius:999px; padding:.2rem .55rem; }
-    .gear { width:var(--tap); height:var(--tap); flex:0 0 auto; border-radius:14px; border:1px solid var(--line);
+    .gear { width:var(--tap); height:var(--tap); flex:0 0 auto; border-radius:15px; border:1px solid var(--line);
       background:var(--card); color:var(--ink); font-size:1.5rem; cursor:pointer; line-height:1;
-      display:flex; align-items:center; justify-content:center; transition:border-color .12s, transform .05s; }
+      display:flex; align-items:center; justify-content:center; transition:border-color .12s, background .12s, transform .06s; }
     .gear:hover { border-color:var(--accent); }
-    .gear:active { transform:scale(.95); }
-    /* ---- Quick-print actions, moved into the header ---- */
-    .qp-actions { display:flex; align-items:center; gap:.5rem; }
-    .qp { min-height:40px; padding:0 .9rem; font:inherit; font-weight:700; font-size:.9rem;
-      border-radius:11px; border:1px solid var(--line); background:var(--card); color:var(--ink);
-      cursor:pointer; white-space:nowrap; transition:border-color .12s, transform .05s, background .12s; }
+    .gear:active { transform:scale(.94); background:var(--accent-soft); }
+    /* ---- Quick-print actions, in the header ---- */
+    .qp-actions { display:flex; align-items:center; gap:.5rem; flex:0 1 auto; }
+    .qp { min-height:var(--tap); padding:0 1.15rem; font:inherit; font-weight:700; font-size:.95rem;
+      border-radius:13px; border:1px solid var(--line); background:var(--card); color:var(--ink);
+      cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:.4rem;
+      transition:border-color .12s, transform .06s, background .12s; }
     .qp:hover { border-color:var(--accent); }
-    .qp:active { transform:translateY(1px); }
+    .qp:active { transform:translateY(1px); background:var(--accent-soft); }
     .qp.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+    .qp.primary:active { background:var(--accent); }
 
-    /* ---- Tile grid: full-height columns that share the viewport width equally,
-           so nothing spills past the fold. Each column stacks its tiles, which
-           split the column height and scroll their own body. ---- */
-    .grid { flex:1 1 auto; min-height:0; overflow:hidden;
-      display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr);
-      grid-template-rows:minmax(0, 1fr);
-      gap:1rem; padding:1rem; }
-    .col { display:flex; flex-direction:column; gap:1rem; min-height:0; }
-    .col > .tile { flex:1 1 0; }
+    /* ---- Tile grid: a responsive flow of content-sized tiles. Columns form and
+           dissolve with the viewport (auto-fit), tiles rise to the top of their
+           track (align-items:start) instead of stretching, and the board scrolls
+           as one surface. Related tiles are grouped into .col stacks. ---- */
+    .grid { flex:1 1 auto; display:grid; align-items:start;
+      grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));
+      gap:var(--gap); padding:var(--gap);
+      max-width:1700px; width:100%; margin:0 auto; }
+    .col { display:flex; flex-direction:column; gap:var(--gap); min-width:0; }
     .tile { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
-      box-shadow:var(--shadow); padding:1rem 1.15rem; display:flex; flex-direction:column;
-      min-height:0; }
-    .tile-head { display:flex; align-items:center; gap:.6rem; margin-bottom:.85rem; }
-    .tile-head h2 { font-size:.76rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
+      box-shadow:var(--shadow); padding:var(--pad); display:flex; flex-direction:column; min-width:0; }
+    .tile-head { display:flex; align-items:center; gap:.6rem; margin-bottom:1rem; }
+    .tile-head h2 { font-size:.82rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted);
       margin:0; font-weight:800; }
-    .tile-head .ic { font-size:1.15rem; }
-    .tile-head .count { margin-left:auto; font-size:.72rem; font-weight:800; color:var(--muted);
-      background:color-mix(in srgb, var(--ink) 7%, transparent); border-radius:999px; padding:.1rem .55rem;
+    .tile-head .ic { font-size:1.3rem; line-height:1; }
+    .tile-head .count { margin-left:auto; font-size:.76rem; font-weight:800; color:var(--muted);
+      background:color-mix(in srgb, var(--ink) 8%, transparent); border-radius:999px; padding:.2rem .65rem;
       min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    /* Compact per-tile print button, top-right in the header (always follows the
-       count pill, which carries the margin-left:auto that pushes both right). */
-    .tile-head .print { flex:0 0 auto; margin-left:.5rem; width:32px; height:32px; border-radius:9px;
-      border:1px solid var(--line); background:var(--card); color:var(--muted); font-size:1rem; line-height:1;
+    /* Per-tile print button, top-right (follows the count pill, which carries the
+       margin-left:auto that pushes both right). Sized for a fingertip. */
+    .tile-head .print { flex:0 0 auto; margin-left:.55rem; width:42px; height:42px; border-radius:12px;
+      border:1px solid var(--line); background:var(--card); color:var(--muted); font-size:1.15rem; line-height:1;
       cursor:pointer; display:flex; align-items:center; justify-content:center;
-      transition:border-color .12s, color .12s, transform .05s; }
+      transition:border-color .12s, color .12s, background .12s, transform .06s; }
     .tile-head .print:hover { border-color:var(--accent); color:var(--ink); }
-    .tile-head .print:active { transform:scale(.92); }
+    .tile-head .print:active { transform:scale(.9); background:var(--accent-soft); }
 
     /* Add-item box in the footer of Tasks / Groceries tiles. */
-    .additem { display:flex; gap:.5rem; }
-    .additem input { flex:1 1 auto; min-width:0; height:42px; padding:0 .8rem; font:inherit; font-size:.95rem;
-      border:1px solid var(--line); border-radius:11px; background:var(--card); color:var(--ink); }
-    .additem input:focus { outline:none; border-color:var(--accent); }
-    .additem button { flex:0 0 auto; width:42px; height:42px; border-radius:11px; border:1px solid var(--accent);
-      background:var(--accent); color:var(--accent-ink); font-size:1.4rem; line-height:1; cursor:pointer;
-      display:flex; align-items:center; justify-content:center; transition:transform .05s, opacity .12s; }
+    .additem { display:flex; gap:.55rem; }
+    .additem input { flex:1 1 auto; min-width:0; height:var(--tap); padding:0 .95rem; font:inherit; font-size:1rem;
+      border:1px solid var(--line); border-radius:13px; background:var(--card); color:var(--ink); }
+    .additem input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+    .additem button { flex:0 0 auto; width:var(--tap); height:var(--tap); border-radius:13px; border:1px solid var(--accent);
+      background:var(--accent); color:var(--accent-ink); font-size:1.6rem; line-height:1; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; transition:transform .06s, opacity .12s; }
     .additem button:active { transform:translateY(1px); }
     .additem button:disabled { opacity:.5; cursor:default; }
-    .tile-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; }
-    .tile-foot { margin-top:.9rem; }
-    .empty { color:var(--muted); font-size:.9rem; padding:1rem 0; text-align:center; }
+    /* Tiles size to their content; the whole board scrolls, so no internal scroll. */
+    .tile-body { min-height:0; }
+    .tile-foot { margin-top:1rem; }
+    .empty { color:var(--muted); font-size:.95rem; padding:1.4rem 0; text-align:center; }
 
     /* ---- Buttons ---- */
-    button.act { width:100%; min-height:var(--tap); font:inherit; font-weight:700; font-size:1rem;
-      border-radius:13px; border:1px solid var(--line); background:var(--card); color:var(--ink);
-      cursor:pointer; transition:border-color .12s, transform .05s, background .12s; }
+    button.act { width:100%; min-height:var(--tap); font:inherit; font-weight:700; font-size:1.02rem;
+      border-radius:14px; border:1px solid var(--line); background:var(--card); color:var(--ink);
+      cursor:pointer; transition:border-color .12s, transform .06s, background .12s; }
     button.act:hover { border-color:var(--accent); }
-    button.act:active { transform:translateY(1px); }
+    button.act:active { transform:translateY(1px); background:var(--accent-soft); }
     button.act.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
     .btn-row { display:flex; gap:.6rem; }
     .btn-row > button { flex:1; }
 
     /* ---- Weather tile ---- */
-    .wx-now { display:flex; align-items:center; gap:1rem; }
-    .wx-ic { font-size:3.6rem; line-height:1; }
-    .wx-temp { font-size:3rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
-    .wx-label { font-size:1.05rem; font-weight:600; }
-    .wx-stats { color:var(--muted); font-size:.86rem; margin-top:.5rem; }
-    .wx-fc { display:flex; gap:.5rem; margin-top:1rem; }
+    .wx-now { display:flex; align-items:center; gap:1.1rem; }
+    .wx-ic { font-size:4rem; line-height:1; }
+    .wx-temp { font-size:3.4rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+    .wx-label { font-size:1.1rem; font-weight:600; margin-top:.2rem; }
+    .wx-stats { color:var(--muted); font-size:.9rem; margin-top:.6rem; }
+    .wx-fc { display:flex; gap:.6rem; margin-top:1.1rem; }
     .wx-day { flex:1; text-align:center; background:color-mix(in srgb, var(--ink) 4%, transparent);
-      border-radius:12px; padding:.6rem .3rem; }
-    .wx-day .d { font-size:.72rem; font-weight:800; text-transform:uppercase; color:var(--muted); }
-    .wx-day .e { font-size:1.7rem; line-height:1.3; }
-    .wx-day .t { font-size:.86rem; font-weight:700; }
+      border:1px solid var(--line); border-radius:14px; padding:.75rem .3rem; }
+    .wx-day .d { font-size:.74rem; font-weight:800; text-transform:uppercase; color:var(--muted); letter-spacing:.03em; }
+    .wx-day .e { font-size:2rem; line-height:1.35; }
+    .wx-day .t { font-size:.92rem; font-weight:700; }
     .wx-day .t .lo { color:var(--muted); font-weight:500; }
-    .wx-day .h { font-size:.72rem; color:var(--muted); margin-top:.15rem; }
+    .wx-day .h { font-size:.74rem; color:var(--muted); margin-top:.2rem; }
     /* Home location line (which county WEATHER_LAT/LON sits in) */
-    .wx-loc { font-size:.78rem; color:var(--muted); margin-bottom:.6rem; display:flex;
+    .wx-loc { font-size:.84rem; color:var(--muted); margin-bottom:.75rem; display:flex;
       align-items:center; gap:.3rem; }
     /* NWS alerts banner */
     .wx-alerts { display:flex; flex-direction:column; gap:.5rem; margin-bottom:.9rem; }
-    .wx-alert { --sev:var(--red); border-left:3px solid var(--sev); padding:.5rem .7rem;
-      background:color-mix(in srgb, var(--sev) 10%, transparent); border-radius:8px; }
+    .wx-alert { --sev:var(--red); border-left:4px solid var(--sev); padding:.75rem .9rem;
+      background:color-mix(in srgb, var(--sev) 10%, transparent); border-radius:12px; }
     .wx-alert.sev-severe, .wx-alert.sev-extreme { --sev:var(--red); }
     .wx-alert.sev-moderate { --sev:var(--amber); }
     .wx-alert.sev-minor, .wx-alert.sev-unknown { --sev:var(--grey); }
@@ -155,8 +167,9 @@
     .wx-alert .all-counties { font-size:.74rem; margin-bottom:.35rem; overflow-wrap:anywhere; }
     .wx-alert .all-counties b { color:var(--sev); }
     .wx-alert details { margin-top:.5rem; }
-    .wx-alert details > summary { font-size:.72rem; font-weight:700; color:var(--muted);
-      cursor:pointer; list-style:none; user-select:none; }
+    .wx-alert details > summary { font-size:.8rem; font-weight:700; color:var(--muted);
+      cursor:pointer; list-style:none; user-select:none; padding:.55rem 0; min-height:2.4rem;
+      display:flex; align-items:center; }
     .wx-alert details > summary::-webkit-details-marker { display:none; }
     .wx-alert details > summary::before { content:'▸ '; }
     .wx-alert details[open] > summary::before { content:'▾ '; }
@@ -182,22 +195,28 @@
     .wx-graph .ends { font-size:.78rem; font-weight:700; font-variant-numeric:tabular-nums; }
 
     /* ---- List rows (tasks, calendar, news, github) ---- */
-    .row { display:flex; align-items:flex-start; gap:.6rem; padding:.5rem 0; border-top:1px solid var(--line); }
+    .row { display:flex; align-items:flex-start; gap:.7rem; padding:.75rem .1rem; border-top:1px solid var(--line); }
     .row:first-child { border-top:0; }
-    .row.urgent { border-left:3px solid var(--red); padding-left:.6rem; margin-left:-.6rem; }
-    .box { flex:0 0 auto; width:22px; height:22px; border-radius:6px; border:2px solid var(--muted);
-      display:flex; align-items:center; justify-content:center; font-size:.9rem; margin-top:.05rem; }
+    .row.urgent { border-left:3px solid var(--red); padding-left:.7rem; margin-left:-.7rem; }
+    .box { flex:0 0 auto; width:26px; height:26px; border-radius:8px; border:2px solid var(--muted);
+      display:flex; align-items:center; justify-content:center; font-size:1rem; margin-top:.05rem; }
     .box.on { background:var(--green); border-color:var(--green); color:#fff; }
     .row .main { flex:1; min-width:0; }
-    .row .t { font-weight:600; overflow-wrap:anywhere; }
+    .row .t { font-weight:600; overflow-wrap:anywhere; line-height:1.4; }
     .row.done .t { text-decoration:line-through; color:var(--muted); font-weight:500; }
-    .row .sub { font-size:.8rem; color:var(--muted); overflow-wrap:anywhere; }
-    .row .when { flex:0 0 auto; font-weight:700; font-size:.82rem; color:var(--accent);
-      font-variant-numeric:tabular-nums; min-width:5.5rem; }
-    @media (prefers-color-scheme: dark){ .row .when { color:var(--muted); } }
-    .due { font-size:.76rem; font-weight:700; color:var(--muted); }
+    .row .sub { font-size:.85rem; color:var(--muted); overflow-wrap:anywhere; margin-top:.1rem; }
+    .row .when { flex:0 0 auto; font-weight:700; font-size:.85rem; color:var(--accent);
+      font-variant-numeric:tabular-nums; min-width:5.5rem; padding-top:.1rem; }
+    @media (prefers-color-scheme: dark){ .row .when { color:#8fb4e8; } }
+    .due { font-size:.8rem; font-weight:700; color:var(--muted); }
     .due.over { color:var(--red); }
-    .row .price { align-self:center; font-size:.82rem; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .row .price { align-self:center; font-size:.88rem; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    /* Link rows (news) get a subtle affordance so it's obvious they're tappable. */
+    .row.link { cursor:pointer; border-radius:12px; margin:0 -.5rem; padding-left:.5rem; padding-right:2.2rem; position:relative; }
+    .row.link::after { content:'↗'; position:absolute; right:.7rem; top:50%; transform:translateY(-50%);
+      color:var(--muted); font-size:1rem; opacity:.5; }
+    .row.link:hover { background:color-mix(in srgb, var(--ink) 5%, transparent); }
+    .row.link:active { background:color-mix(in srgb, var(--ink) 9%, transparent); }
     .tile-head .count.est { text-transform:none; letter-spacing:0; }
 
     /* ---- Receipt tile ---- */
@@ -222,12 +241,14 @@
       display:flex; align-items:center; justify-content:center; padding:1rem; }
     .backdrop[hidden] { display:none; }
     .modal { background:var(--card); border-radius:var(--radius); box-shadow:0 20px 60px rgba(0,0,0,.4);
-      width:min(560px, 100%); max-height:90vh; overflow:auto; padding:1.3rem 1.4rem; }
-    .modal-head { display:flex; align-items:center; margin-bottom:1rem; }
-    .modal-head h2 { margin:0; font-size:1.15rem; font-weight:800; }
-    .modal-head button { margin-left:auto; width:40px; height:40px; border-radius:10px; border:1px solid var(--line);
-      background:var(--card); color:var(--ink); font-size:1.2rem; cursor:pointer; }
-    .modal-head button + button { margin-left:.4rem; } /* second button sits beside the first, not scattered */
+      width:min(580px, 100%); max-height:90vh; overflow:auto; padding:1.4rem 1.5rem; }
+    .modal-head { display:flex; align-items:center; margin-bottom:1.1rem; }
+    .modal-head h2 { margin:0; font-size:1.25rem; font-weight:800; }
+    .modal-head button { margin-left:auto; width:46px; height:46px; border-radius:13px; border:1px solid var(--line);
+      background:var(--card); color:var(--ink); font-size:1.3rem; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; transition:background .12s, transform .06s; }
+    .modal-head button:active { background:var(--accent-soft); transform:scale(.94); }
+    .modal-head button + button { margin-left:.5rem; } /* second button sits beside the first, not scattered */
     .sect { margin:1rem 0; }
     .sect h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
       margin:0 0 .6rem; font-weight:800; }
@@ -239,52 +260,65 @@
     .meta code { font-size:.78rem; word-break:break-all; color:var(--muted); }
     .note { margin-top:.6rem; padding:.55rem .75rem; border-radius:9px; font-size:.82rem;
       background:color-mix(in srgb, var(--amber) 13%, transparent); color:var(--amber); }
-    .src { display:flex; align-items:center; gap:.6rem; padding:.5rem 0; border-top:1px solid var(--line); }
+    .src { display:flex; align-items:center; gap:.7rem; padding:.7rem 0; border-top:1px solid var(--line); }
     .src:first-child { border-top:0; }
+    .src > span:first-child { font-size:1.25rem; }
     .src .name { font-weight:600; }
-    .src .desc { color:var(--muted); font-size:.8rem; }
-    .src .tag { margin-left:auto; font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em;
-      color:var(--muted); }
+    .src .desc { color:var(--muted); font-size:.84rem; }
+    .src .tag { margin-left:auto; font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+      padding:.22rem .6rem; border-radius:999px; }
+    .src .tag.on { color:var(--green); background:color-mix(in srgb, var(--green) 14%, transparent); }
+    .src .tag.off { color:var(--muted); background:color-mix(in srgb, var(--ink) 8%, transparent); }
     #modal-msg { min-height:1.2rem; margin-top:.4rem; font-size:.85rem; color:var(--muted); }
 
     /* ---- Tappable task rows (two-way Google Tasks) ---- */
-    .row.check { border-radius:8px; margin:0 -.4rem; padding-left:.4rem; padding-right:.4rem; }
+    .row.check { border-radius:12px; margin:0 -.5rem; padding:.7rem .5rem; min-height:var(--tap); align-items:center; cursor:pointer; }
     .row.check:hover { background:color-mix(in srgb, var(--ink) 5%, transparent); }
     .row.check:active { background:color-mix(in srgb, var(--ink) 9%, transparent); }
-    .row .box { transition:background .12s, border-color .12s; }
+    .row.check .main { align-self:center; }
+    .row .box { transition:background .12s, border-color .12s, transform .06s; }
+    .row.check:active .box { transform:scale(.9); }
 
-    /* ---- Mobile (≤720px): stack tiles and scroll the page (not above the fold) ---- */
-    @media (max-width:720px){
-      body { height:auto; overflow:auto; display:block; }
-      .grid { grid-template-columns:1fr; grid-auto-flow:row; grid-auto-columns:auto;
-        grid-template-rows:none; grid-auto-rows:auto; overflow:visible; height:auto; }
-      /* Columns collapse to a normal page flow; tiles size to content, not a split. */
-      .col { display:contents; }
-      .col > .tile { flex:none; }
-      .tile { min-height:0; }
-      .tile-body { overflow:visible; }
-      .paper-wrap { max-height:none; }
-      /* Keep the top bar tidy; let the quick-print actions wrap to their own row. */
-      .topbar { gap:.55rem; padding:.6rem .8rem; flex-wrap:wrap; }
-      .topbar img { height:32px; }
-      .brand { font-size:1rem; white-space:nowrap; }
+    /* ---- Medium (≤1000px): the three quick-print actions drop to their own
+           full-width row so the header (brand · clock · icons) never crowds or
+           pushes the settings/receipt icons off-screen. ---- */
+    @media (max-width:1000px){
       .qp-actions { order:5; flex:1 1 100%; }
-      .qp { flex:1; padding:0 .5rem; font-size:.82rem; min-height:38px; }
-      .clock .time { font-size:1.2rem; }
-      .clock .date { font-size:.72rem; }
-      .gear { width:44px; height:44px; font-size:1.3rem; }
+      .qp { flex:1; justify-content:center; padding:0 .6rem; }
     }
+    /* ---- Narrow / phone (≤760px): collapse to a single flowing column. ---- */
+    @media (max-width:760px){
+      /* Tiles flow individually (not in grouped .col stacks) for a clean single column. */
+      .grid { grid-template-columns:1fr; }
+      .col { display:contents; }
+      .topbar { gap:.6rem; padding:.6rem .8rem .7rem; }
+      .topbar img { height:34px; }
+      .brand { font-size:1.05rem; }
+      .clock .time { font-size:1.25rem; }
+      .clock .date { font-size:.74rem; }
+      .qp { font-size:.92rem; }
+    }
+    /* Very small: shrink the header chrome a touch more. */
+    @media (max-width:420px){
+      .clock .time { font-size:1.1rem; }
+      .brand { font-size:1rem; }
+      .topbar img { height:30px; }
+    }
+    /* Honour reduced-motion: kill the press/scale transitions. */
+    @media (prefers-reduced-motion: reduce){ * { transition:none !important; } }
   </style>
 </head>
 <body>
   <header class="topbar">
-    <img class="logo-light" src="/logo.png" alt="Ferrix Systems" />
-    <img class="logo-dark" src="/logo-light.png" alt="Ferrix Systems" />
-    <div class="brand">Print-Notify</div>
+    <div class="brand-wrap">
+      <img class="logo-light" src="/logo.png" alt="Ferrix Systems" />
+      <img class="logo-dark" src="/logo-light.png" alt="Ferrix Systems" />
+      <div class="brand">Print-Notify</div>
+    </div>
     <div class="qp-actions">
-      <button class="qp primary" onclick="post('/api/print','Printing full digest…')">Print digest</button>
-      <button class="qp" onclick="post('/api/checklist','Printing checklist…')">Checklist</button>
-      <button class="qp" onclick="post('/api/poll','Checking for urgent…')">Urgent</button>
+      <button class="qp primary" onclick="post('/api/print','Printing full digest…')">🖨 Print digest</button>
+      <button class="qp" onclick="post('/api/checklist','Printing checklist…')">✓ Checklist</button>
+      <button class="qp" onclick="post('/api/poll','Checking for urgent…')">⚡ Urgent</button>
     </div>
     <span class="chip" id="dryrun" hidden>Dry run</span>
     <div class="clock"><div class="time" id="time">—</div><div class="date" id="date">loading…</div></div>
@@ -315,6 +349,18 @@
       <div class="sect">
         <h3>Notification sources</h3>
         <div id="sources">loading…</div>
+      </div>
+
+      <div class="sect" id="held-sect" hidden>
+        <h3>Held receipts</h3>
+        <div class="meta" id="held"></div>
+        <button class="act" onclick="retryHeld()">Retry now</button>
+        <button class="act" onclick="discardHeld()">Discard all</button>
+      </div>
+
+      <div class="sect">
+        <h3>Recent receipts</h3>
+        <div class="meta" id="archive">—</div>
       </div>
 
       <div class="sect">
@@ -374,7 +420,7 @@
       return 'cloud';
     }
     const wxEmoji = (g) => GROUP_EMOJI[g] ?? '☁️';
-    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
     let TZ = undefined; // filled from /api/status
     let todayISO = new Date().toISOString().slice(0, 10);
@@ -482,7 +528,7 @@
         if (it.checked !== undefined) {
           const over = it.due && !it.checked && it.due < todayISO;
           const dueLabel = it.due ? `<span class="due${over ? ' over' : ''}">${over ? 'Overdue ' : 'Due '}${esc(it.due.slice(5))}</span>` : '';
-          const tap = it.id ? ` role="button" tabindex="0" onclick="toggleTask('${esc(it.id)}', this)"` : '';
+          const tap = it.id ? ` role="button" tabindex="0" data-id="${esc(it.id)}" onclick="toggleTask(this.dataset.id, this)"` : '';
           const price = it.price != null ? `<span class="price">~$${it.price.toFixed(2)}</span>` : '';
           return `<div class="row check ${it.checked ? 'done' : ''}"${tap}>
             <span class="box ${it.checked ? 'on' : ''}">${it.checked ? '✓' : ''}</span>
@@ -493,10 +539,11 @@
           return `<div class="row"><span class="when">${esc(it.detail ?? '')}</span>
             <div class="main"><div class="t">${esc(it.title)}</div></div></div>`;
         }
-        // News: headline + outlet.
+        // News: headline + outlet. Whole row taps through to the article.
         if (s === 'news') {
-          const link = it.url ? ` onclick="window.open('${esc(it.url)}','_blank')" style="cursor:pointer"` : '';
-          return `<div class="row"${link}><div class="main"><div class="t">${esc(it.title)}</div>
+          const safeUrl = /^https?:/i.test(it.url ?? '');
+          const link = safeUrl ? ` role="button" tabindex="0" data-url="${esc(it.url)}" onclick="window.open(this.dataset.url,'_blank','noopener')"` : '';
+          return `<div class="row${safeUrl ? ' link' : ''}"${link}><div class="main"><div class="t">${esc(it.title)}</div>
             <div class="sub">${esc(it.detail ?? '')}</div></div></div>`;
         }
         // Default (github, etc.): title + detail, urgent gets an accent bar.
@@ -694,10 +741,10 @@
       const total = g.estTotal != null
         ? `<span class="count est">Est. ~$${g.estTotal.toFixed(2)}${g.priceCity ? ' · ' + esc(g.priceCity) : ''}</span>`
         : `<span class="count">${g.count}</span>`;
-      const printBtn = `<button class="print" title="Print ${esc(g.label)}" aria-label="Print ${esc(g.label)}" onclick="printSection('${esc(g.source)}')">🖨</button>`;
+      const printBtn = `<button class="print" title="Print ${esc(g.label)}" aria-label="Print ${esc(g.label)}" data-source="${esc(g.source)}" onclick="printSection(this.dataset.source)">🖨</button>`;
       // Tasks / groceries lists get an "add item" box that writes back to Google Tasks.
       const addBox = g.addable ? `<div class="tile-foot">
-        <form class="additem" onsubmit="return addItem(event, '${esc(g.source)}')">
+        <form class="additem" data-source="${esc(g.source)}" onsubmit="return addItem(event, this.dataset.source)">
           <input type="text" placeholder="Add to ${esc(g.label)}…" aria-label="Add to ${esc(g.label)}" autocomplete="off" />
           <button type="submit" title="Add" aria-label="Add">+</button>
         </form></div>` : '';
@@ -768,7 +815,7 @@
           const [ic, name, desc] = SOURCE_INFO[x.name] || ['📋', x.name, ''];
           return `<div class="src"><span>${ic}</span>`
             + `<div><div class="name">${esc(name)}</div><div class="desc">${esc(desc)}</div></div>`
-            + `<span class="tag">${x.enabled ? 'on' : 'off'}</span></div>`;
+            + `<span class="tag ${x.enabled ? 'on' : 'off'}">${x.enabled ? 'on' : 'off'}</span></div>`;
         }).join('');
         $('schedule-meta').innerHTML = [
           ['Morning digest', s.schedule.morningDigest],
@@ -803,8 +850,44 @@
       }
     }
 
+    // ---- Held receipts + the archive of what printed ----
+    const shortTime = (iso) => new Date(iso).toLocaleString('en-US',
+      { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', ...(TZ ? { timeZone: TZ } : {}) });
+
+    async function loadQueue() {
+      try {
+        const { held } = await (await fetch('/api/queue')).json();
+        $('held-sect').hidden = !held.length;
+        $('held').innerHTML = held.map((j) =>
+          `<span class="k">${esc(shortTime(j.queuedAt))}</span>`
+          + `<span>${esc(j.label)}${j.lastError ? ` — ${esc(j.lastError)}` : ''}</span>`).join('');
+      } catch (e) { $('held-sect').hidden = true; }
+    }
+
+    async function loadArchive() {
+      try {
+        const { receipts } = await (await fetch('/api/receipts')).json();
+        $('archive').innerHTML = receipts.slice(0, 10).map((r) =>
+          `<span class="k">${esc(shortTime(r.at))}</span>`
+          + `<span><a href="/api/receipts/${encodeURIComponent(r.id)}.png" target="_blank" rel="noopener">${esc(r.label)}</a>`
+          + `${r.printed ? '' : ' (not printed)'}</span>`).join('') || '—';
+      } catch (e) { $('archive').textContent = 'archive unavailable'; }
+    }
+
+    async function retryHeld() {
+      await post('/api/queue/flush', 'Retrying held receipts…', null, true);
+      loadQueue();
+      loadArchive();
+    }
+
+    async function discardHeld() {
+      if (!confirm('Discard all held receipts? They will not print.')) return;
+      await post('/api/queue/clear', 'Discarding held receipts…', null, true);
+      loadQueue();
+    }
+
     // ---- Settings modal open/close ----
-    function openModal() { $('modal').hidden = false; loadStatus(); loadPrinter(); }
+    function openModal() { $('modal').hidden = false; loadStatus(); loadPrinter(); loadQueue(); loadArchive(); }
     function closeModal() { $('modal').hidden = true; }
     $('gear').onclick = openModal;
     $('modal-close').onclick = closeModal;
@@ -826,7 +909,7 @@
     loadDashboard();
     loadStatus();
     setInterval(loadDashboard, 1000 * 60 * 5);   // refresh tiles every 5 min
-    setInterval(() => { if (!$('modal').hidden) loadPrinter(); }, 15000);
+    setInterval(() => { if (!$('modal').hidden) { loadPrinter(); loadQueue(); } }, 15000);
   </script>
 </body>
 </html>

@@ -37,6 +37,11 @@ export interface SearchResult {
   title?: string | null;
   merchant?: string | null;
 }
+/**
+ * Resolves null when the provider answered and has no price. Throws when it could
+ * not answer (network, quota, outage): that says nothing about the item, so it must
+ * not be cached as "no price".
+ */
 export type SearchFn = (query: string) => Promise<SearchResult | null>;
 
 interface CacheRow {
@@ -133,9 +138,10 @@ function withinBudget(s: Stmts, now: number, hourlyLimit: number, monthlyLimit: 
  * recently negative-cached. `null` means the caller should fall back to the seed
  * table.
  *
- * The negative cache is written only when at least one provider ran AND the budget
- * did not cut the list short — so an item that merely hit the quota mid-fallback
- * retries next time instead of being poisoned for the negative-cache window.
+ * The negative cache is written only when at least one provider ran, every one that
+ * ran gave a real answer, AND the budget did not cut the list short — so an item
+ * that merely hit an outage or the quota retries next time instead of being poisoned
+ * for the negative-cache window.
  */
 export async function cachedPrice(
   query: string,
@@ -154,6 +160,7 @@ export async function cachedPrice(
   let found: SearchResult | null = null;
   let ranAny = false;
   let stoppedByBudget = false;
+  let failed = false;
   for (const search of opts.searches) {
     if (!withinBudget(s, opts.now, opts.hourlyLimit, opts.monthlyLimit)) {
       stoppedByBudget = true;
@@ -161,7 +168,12 @@ export async function cachedPrice(
     }
     ranAny = true;
     s.logSearch.run(opts.now);
-    found = await search(query);
+    try {
+      found = await search(query);
+    } catch (e) {
+      failed = true; // try the next provider, but this miss proves nothing
+      console.warn(`[prices] search failed for "${query}":`, (e as Error)?.message ?? e);
+    }
     if (found) break; // first provider with a price wins
   }
 
@@ -174,9 +186,9 @@ export async function cachedPrice(
     return { price: found.price, title: found.title ?? null, merchant: found.merchant ?? null, source: 'live' };
   }
 
-  // No price. Negative-cache only if we exhausted every provider within budget;
-  // if the budget cut us short (or nothing ran), leave it uncached to retry.
-  if (ranAny && !stoppedByBudget) {
+  // No price. Negative-cache only if every provider truly answered within budget;
+  // otherwise leave it uncached to retry.
+  if (ranAny && !stoppedByBudget && !failed) {
     s.upsert.run({
       key, query, price: null, title: null, merchant: null,
       now: opts.now, expires: opts.now + NEGATIVE_TTL_MS,

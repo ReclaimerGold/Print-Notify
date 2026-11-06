@@ -3,6 +3,9 @@ import { printDocument, type ThermalDevice } from './printer.js';
 import { LOGO_PRINT_PATH } from './logo.js';
 import { textImage, checklistImage, listImage, type ListRow } from './bitmap.js';
 import { pricedChecklistSpec, checklistItemCount } from './checklist.js';
+import { submit, setRenderer, healthFootnote, type SubmitResult } from './printQueue.js';
+import { getPrinterInfo } from './printerInfo.js';
+import { archiveReceipt } from './archive.js';
 import type { NotificationItem } from './sources/types.js';
 
 const SEVERITY_MARK: Record<string, string> = { urgent: '!! ', notice: ' * ', info: '   ' };
@@ -11,8 +14,13 @@ const SEVERITY_MARK: Record<string, string> = { urgent: '!! ', notice: ' * ', in
  * Canonical section order shared by the printed digest and the dashboard tiles.
  * Matched case-insensitively (Tasks/Groceries are Google Tasks list titles);
  * anything unlisted sorts to the end in first-seen order.
+ *
+ * Roughly: what the day looks like, then what you owe it, then what happened.
+ * Certs sit last — it's an ops footnote that should never crowd the top.
  */
-export const SOURCE_ORDER = ['weather', 'calendar', 'tasks', 'groceries', 'news', 'github'];
+export const SOURCE_ORDER = [
+  'weather', 'calendar', 'birthdays', 'tasks', 'groceries', 'news', 'sports', 'github', 'certs',
+];
 
 export function sourceRank(source: string): number {
   const i = SOURCE_ORDER.indexOf(source.toLowerCase());
@@ -84,11 +92,24 @@ function relAge(ts: number): string {
   return d === 1 ? 'yesterday' : `${d}d ago`;
 }
 
+/** Join the non-empty parts of a metadata subline with the standard separator. */
+const subline = (...parts: (string | undefined)[]) =>
+  parts.filter(Boolean).join('  ·  ') || undefined;
+
 /** News rows: bold headline + non-bold "Outlet · 3h ago" metadata subline. */
 function newsRows(list: NotificationItem[]): ListRow[] {
   return list.map((it) => ({
     primary: it.title,
-    sub: [it.detail, relAge(it.timestamp)].filter(Boolean).join('  ·  '),
+    sub: subline(it.detail, relAge(it.timestamp)),
+  }));
+}
+
+/** Generic marker + headline + detail rows (birthdays, sports, certs). */
+function iconRows(list: NotificationItem[]): ListRow[] {
+  return list.map((it) => ({
+    icon: it.icon,
+    primary: it.title,
+    sub: subline(it.detail),
   }));
 }
 
@@ -109,17 +130,36 @@ function githubRows(list: NotificationItem[]): ListRow[] {
     primary: it.title,
     // Real PR rows get a "PR title (reason) · 3h ago" subline; the "+N more"
     // summary row has no detail, so it stays a bare headline.
-    sub: it.detail ? `${it.detail}  ·  ${relAge(it.timestamp)}` : undefined,
+    sub: it.detail ? subline(it.detail, relAge(it.timestamp)) : undefined,
   }));
 }
 
-/** Styled body blocks for one source's items (non-checklist). News/calendar/github
- *  render as bitmaps via listImage; anything else uses the per-item text layout. */
+/** Sources rendered as styled `listImage` bitmaps, and whether rows get dividers. */
+const LIST_SECTIONS: Record<string, { divider: boolean; rows: (list: NotificationItem[]) => ListRow[] }> = {
+  news: { divider: true, rows: newsRows },
+  calendar: { divider: false, rows: calendarRows },
+  github: { divider: true, rows: githubRows },
+  birthdays: { divider: false, rows: iconRows },
+  sports: { divider: false, rows: iconRows },
+  certs: { divider: false, rows: iconRows },
+};
+
+/**
+ * The styled rows for one source, or null when it has no list renderer (and so
+ * falls back to the per-item text layout). Separated from block-building so the
+ * row text — markers, sublines, ordering — is assertable without rendering PNGs.
+ */
+export function sectionRows(source: string, list: NotificationItem[]): ListRow[] | null {
+  const spec = LIST_SECTIONS[source];
+  return spec ? spec.rows(list) : null;
+}
+
+/** Styled body blocks for one source's items (non-checklist). Most sources render
+ *  as a bitmap via listImage; anything unlisted uses the per-item text layout. */
 async function sectionBodyBlocks(source: string, list: NotificationItem[]): Promise<Block[]> {
-  if (source === 'news') return [{ type: 'image', path: await listImage(newsRows(list), true), align: 'center' }];
-  if (source === 'calendar') return [{ type: 'image', path: await listImage(calendarRows(list)), align: 'center' }];
-  if (source === 'github') return [{ type: 'image', path: await listImage(githubRows(list), true), align: 'center' }];
-  return list.flatMap(itemBlocks);
+  const rows = sectionRows(source, list);
+  if (!rows) return list.flatMap(itemBlocks);
+  return [{ type: 'image', path: await listImage(rows, LIST_SECTIONS[source].divider), align: 'center' }];
 }
 
 /** A source that failed to fetch (from fetchAll's `errors`). */
@@ -132,6 +172,7 @@ export async function buildDigestBlocks(
   title: string,
   items: NotificationItem[],
   errors: SourceError[] = [],
+  footnote?: string,
 ): Promise<Block[]> {
   const blocks: Block[] = [
     { type: 'image', path: LOGO_PRINT_PATH, align: 'center' },
@@ -186,13 +227,28 @@ export async function buildDigestBlocks(
     blocks.push(...await sectionBodyBlocks(source, list));
     blocks.push({ type: 'space' });
   }
+
   blocks.push({ type: 'rule' }, { type: 'text', text: `${items.length} items`, align: 'center' });
+  // Printer-health footnote (e.g. "paper low"), so the warning rides out on the
+  // last receipt that fits rather than waiting for a dashboard visit.
+  if (footnote) blocks.push({ type: 'text', text: footnote, align: 'center' });
   return blocks;
 }
 
-/** Print any ordered block list (digest, alert, sentinel) through one pipeline. */
-export async function printReceipt(blocks: Block[]): Promise<void> {
-  await printDocument((p) => renderBlocks(p, blocks));
+// The queue renders through this module, and this module submits through the
+// queue. Injecting the renderer keeps that from becoming an import cycle.
+setRenderer((blocks) => printDocument((p) => renderBlocks(p, blocks)));
+
+/**
+ * Print any ordered block list (digest, alert, sentinel) through one pipeline:
+ * health-check → paper (or hold) → archive. Returns whether it reached paper,
+ * so callers can tell the user the truth rather than assuming.
+ */
+export async function printReceipt(blocks: Block[], label = 'Receipt'): Promise<SubmitResult> {
+  const result = await submit(label, blocks);
+  // Archiving runs after the paper is out and never blocks or fails the print.
+  void archiveReceipt(label, blocks, result.printed);
+  return result;
 }
 
 /** Send an ordered block list to the thermal printer. */
@@ -235,15 +291,31 @@ async function renderBlocks(p: ThermalDevice, blocks: Block[]): Promise<void> {
 }
 
 /** Print a full, grouped digest of all items. */
-export async function printDigest(title: string, items: NotificationItem[], errors: SourceError[] = []): Promise<void> {
-  const blocks = await buildDigestBlocks(title, items, errors);
-  await printReceipt(blocks);
+export async function printDigest(
+  title: string,
+  items: NotificationItem[],
+  errors: SourceError[] = [],
+): Promise<SubmitResult> {
+  // Ask the printer how it's doing before composing, so a "paper low" warning
+  // can ride out on this receipt instead of waiting for someone to check.
+  const footnote = await printerFootnote();
+  const blocks = await buildDigestBlocks(title, items, errors, footnote);
+  return printReceipt(blocks, title);
+}
+
+/** Current printer-health footnote, or undefined when it can't be determined. */
+async function printerFootnote(): Promise<string | undefined> {
+  try {
+    return healthFootnote(await getPrinterInfo());
+  } catch {
+    return undefined;
+  }
 }
 
 /** Print just one source's items (a single dashboard tile). Checkable lists
  *  (Tasks/Groceries) render as the pen-checkable checklist bitmap; everything
  *  else uses the same per-item layout as the full digest. */
-export async function printSection(source: string, items: NotificationItem[]): Promise<void> {
+export async function printSection(source: string, items: NotificationItem[]): Promise<SubmitResult> {
   const blocks: Block[] = [
     { type: 'image', path: LOGO_PRINT_PATH, align: 'center' },
     { type: 'image', path: await textImage(source.toUpperCase(), 'title'), align: 'center' },
@@ -256,13 +328,14 @@ export async function printSection(source: string, items: NotificationItem[]): P
   } else {
     blocks.push({ type: 'space' });
     blocks.push(...await sectionBodyBlocks(source, items));
+    blocks.push({ type: 'space' });
   }
   blocks.push({ type: 'rule' }, { type: 'text', text: `${items.length} item${items.length === 1 ? '' : 's'}`, align: 'center' });
-  await printReceipt(blocks);
+  return printReceipt(blocks, source.toUpperCase());
 }
 
 /** Print a compact, high-visibility alert for a small set of urgent items. */
-export async function printAlert(items: NotificationItem[]): Promise<void> {
+export async function printAlert(items: NotificationItem[]): Promise<SubmitResult> {
   const blocks: Block[] = [
     { type: 'image', path: LOGO_PRINT_PATH, align: 'center' },
     { type: 'image', path: await textImage('!! URGENT !!', 'title'), align: 'center' },
@@ -274,5 +347,5 @@ export async function printAlert(items: NotificationItem[]): Promise<void> {
     if (it.detail) blocks.push({ type: 'text', text: it.detail });
     blocks.push({ type: 'space' });
   }
-  await printReceipt(blocks);
+  return printReceipt(blocks, 'Urgent Alert');
 }
